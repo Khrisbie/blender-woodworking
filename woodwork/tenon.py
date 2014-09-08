@@ -1,6 +1,7 @@
 import bpy, bmesh, mathutils
 from math import pi
 from mathutils.geometry import (distance_point_to_plane)
+import sys
 
 # See if the current item should be selected or not
 def selectCheck(isSelected, hasSelected, extend):
@@ -131,11 +132,27 @@ def vector_abs(vector) :
         if (vector[i] < 0) :
             vector[i] = abs(vector[i])
 
+
+def nearlyEqual(a, b, epsilon = 0.00001) :
+    absA = abs(a)
+    absB = abs(b)
+    diff = abs(a - b)
+
+    if a == b :
+        return True
+    elif (a == 0.0 or b == 0.0 or diff < sys.float_info.min) :
+        return diff < (epsilon * sys.float_info.min);
+    else :
+        return diff / (absA + absB) < epsilon;
+    
 class Tenon(bpy.types.Operator):
     bl_description = "Creates a tenon given a face"
     bl_idname = "mesh.tenon"
     bl_label = "Tenon"
     bl_options = {'REGISTER','UNDO'}
+    
+    shortest_length = -1.0
+    longest_length = -1.0
 
     thickness_type = bpy.props.EnumProperty(
         items=[('max', "Max. thickness", "Set thickness to the maximum (length of the shortest side)"),
@@ -268,14 +285,16 @@ class Tenon(bpy.types.Operator):
             shortest_length = length0
             longest_length = length1
         
-        # Initialisation des valeurs par defaut
-        # TODO : tenir compte du changement de face (si dimensions differentes)    
-        if self.thickness == -1 :
+        # Init default values, look if face has changed too
+        if self.thickness == -1 or (not nearlyEqual(shortest_length, self.shortest_length)) :
             self.thickness = shortest_length / 3.0
-        if self.height == -1 :
+        if self.height == -1 or (not nearlyEqual(longest_length, self.longest_length)) :
             self.height = (longest_length * 2.0) / 3.0
-        if self.depth == -1 :
+        if self.depth == -1 or (not nearlyEqual(longest_length, self.longest_length)) :
             self.depth = longest_length
+        
+        self.shortest_length = shortest_length    # used to reinit default values when face changes
+        self.longest_length = longest_length
 
         # Subdivide face
         if self.height_type == "max" :
