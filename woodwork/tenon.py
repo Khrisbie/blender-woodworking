@@ -137,14 +137,18 @@ class Tenon(bpy.types.Operator):
     bl_label = "Tenon"
     bl_options = {'REGISTER','UNDO'}
 
-
-        
+    thickness_type = bpy.props.EnumProperty(
+        items=[('max', "Max. thickness", "Set thickness to the maximum (length of the shortest side)"),
+               ('thickness_value', "Value", "Give value to thickness")],
+        name="Thickness type", default='thickness_value')                             
     thickness = bpy.props.FloatProperty(name = "Thickness",
                                         description = "Tenon thickness relative to smallest side",
                                         min = 0.0,
-                                        default = 0.2,
-                                        subtype='DISTANCE',
-                                        unit='LENGTH')
+                                        default = -1,
+                                        subtype = 'DISTANCE',
+                                        unit = 'LENGTH',
+                                        precision = 3,
+                                        step = 0.01)
 
     height_type = bpy.props.EnumProperty(
         items=[('max', "Max. height", "Set height to the maximum (length of the biggest side)"),
@@ -154,23 +158,33 @@ class Tenon(bpy.types.Operator):
     height = bpy.props.FloatProperty(name = "Height",
                                         description = "Tenon height relative to biggest side",
                                         min = 0.0,
-                                        default = 0.8,
-                                        subtype='DISTANCE',
-                                        unit='LENGTH')
+                                        default = -1,
+                                        subtype = 'DISTANCE',
+                                        unit ='LENGTH',
+                                        precision = 3,
+                                        step = 0.1)
 
     depth = bpy.props.FloatProperty(name = "Depth",
                           description = "Tenon depth",
                           min = 0.0,
-                          default = 0.5,
-                          subtype='DISTANCE',
-                          unit='LENGTH')
+                          default = -1,
+                          subtype = 'DISTANCE',
+                          unit = 'LENGTH',
+                          precision = 3,
+                          step = 0.1)
 
     def draw(self, context):
         layout = self.layout
 
-        layout.prop(self, "thickness", slider=True)
-        layout.prop(self, "height_type")
-        layout.prop(self, "height")
+        thicknessBox = layout.box()
+        thicknessBox.prop(self, "thickness_type")
+        if self.thickness_type == "thickness_value" :
+            thicknessBox.prop(self, "thickness")
+        
+        heightBox = layout.box()
+        heightBox.prop(self, "height_type")
+        if self.height_type == "height_value" :
+            heightBox.prop(self, "height")
         layout.prop(self, "depth")
 
 
@@ -231,10 +245,6 @@ class Tenon(bpy.types.Operator):
         l1 = face.loops[1]
         e1 = l1.edge
         
-        # e0.calc_length() is in local space so not useful here
-        print("e0.calc_length() = ", e0.calc_length())
-        print("e1.calc_length() = ", e1.calc_length())
-        
         mat = obj.matrix_world
         v0 = mat * e0.verts[0].co
         v1 = mat * e0.verts[1].co
@@ -242,24 +252,45 @@ class Tenon(bpy.types.Operator):
         v0 = mat * e1.verts[0].co
         v1 = mat * e1.verts[1].co
         length1 = (v0 - v1).length        
-        print("length0 = ", length0)
-        print("length1 = ", length1)
         
         if (length0 > length1) :
-            #self.thickness.max = length1
-            #self.height.max = length0
             longest_side_tangent = e0.calc_tangent(l0)
             shortest_side_tangent = e1.calc_tangent(l1)
+            longest_edges=[e0, face.loops[2].edge]
+            shortest_edges=[e1, face.loops[3].edge]
+            shortest_length = length1
+            longest_length = length0
         else :
-            #self.thickness.max = length0
-            #self.height.max = length1
             longest_side_tangent = e1.calc_tangent(l1)
             shortest_side_tangent = e0.calc_tangent(l0)
+            longest_edges=[e1, face.loops[3].edge]
+            shortest_edges=[e0, face.loops[2].edge]
+            shortest_length = length0
+            longest_length = length1
+        
+        # Initialisation des valeurs par defaut
+        # TODO : tenir compte du changement de face (si dimensions differentes)    
+        if self.thickness == -1 :
+            self.thickness = shortest_length / 3.0
+        if self.height == -1 :
+            self.height = (longest_length * 2.0) / 3.0
+        if self.depth == -1 :
+            self.depth = longest_length
 
-        print("Longest side tangent = ", longest_side_tangent)
-        print("Shortest side tangent = ", shortest_side_tangent)
+        # Subdivide face
+        if self.height_type == "max" :
+            bpy.ops.mesh.select_all(action="DESELECT")
+            # if tenon height set to maximum, select shortest side edges
+            # to subdivide only in this direction
+            for edge in shortest_edges :
+                edge.select = True
+        elif self.thickness_type == "max" :
+            bpy.ops.mesh.select_all(action="DESELECT")
+            # if tenon thickness set to maximum, select longest side edges
+            # to subdivide only in this direction
+            for edge in longest_edges :
+                edge.select = True
 
-        # Subdivide face, the central part will be the tenon
         bpy.ops.mesh.subdivide(number_cuts=2)
         
         # Get the new faces   
@@ -270,66 +301,102 @@ class Tenon(bpy.types.Operator):
             if bmesh.geometry.intersect_face_point(f, median):
               tenon = f
               break
-
+          
         thicknessFaces = []
         heightFaces = []
         
         thicknessFaces.append(tenon)
         heightFaces.append(tenon)
         
-        # Find faces to resize to obtain tenon base
-        tenonEdges = tenon.edges
-        for tenonEdge in tenonEdges:
-            connectedFaces = tenonEdge.link_faces
-            for connectedFace in connectedFaces:
-                if connectedFace != tenon:
-                    print("Found connected face with index ", connectedFace.index)
-                    connectedLoops = tenonEdge.link_loops
-                    for connectedLoop in connectedLoops:
-                        if connectedLoop.face == connectedFace:
-                            # Return the tangent at this edge relative to a face (pointing inward into the face).
-                            # This uses the face normal for calculation.
-                            tangent = tenonEdge.calc_tangent(connectedLoop)
-                            print("tangent (edge/connected face) = ", tangent)
+        if self.height_type == "max" :
+            # get tenon side facing the smallest side
+            l0 = tenon.loops[0]
+            e0 = l0.edge
+            l1 = tenon.loops[1]
+            e1 = l1.edge
+            
+            tangent0 = e0.calc_tangent(l0)
+            
+            if tangent0 == shortest_side_tangent or tangent0 == -shortest_side_tangent :
+                v0 = mat * e0.verts[0].co
+                v1 = mat * e0.verts[1].co
+            else :
+                v0 = mat * e1.verts[0].co
+                v1 = mat * e1.verts[1].co
+            tenonThicknessToResize = (v0 - v1).length
+        elif self.thickness_type == "max" :
+            # get tenon side facing the longest side
+            l0 = tenon.loops[0]
+            e0 = l0.edge
+            l1 = tenon.loops[1]
+            e1 = l1.edge
+            
+            tangent0 = e0.calc_tangent(l0)
+            
+            if tangent0 == longest_side_tangent or tangent0 == -longest_side_tangent :
+                v0 = mat * e0.verts[0].co
+                v1 = mat * e0.verts[1].co
+            else :
+                v0 = mat * e1.verts[0].co
+                v1 = mat * e1.verts[1].co
+            tenonHeightToResize = (v0 - v1).length
+        else :
+            # Find faces to resize to obtain tenon base
+            tenonEdges = tenon.edges
+            for tenonEdge in tenonEdges:
+                connectedFaces = tenonEdge.link_faces
+                for connectedFace in connectedFaces:
+                    if connectedFace != tenon:
+                        print("Found connected face with index ", connectedFace.index)
+                        connectedLoops = tenonEdge.link_loops
+                        for connectedLoop in connectedLoops:
+                            if connectedLoop.face == connectedFace:
+                                # Return the tangent at this edge relative to a face (pointing inward into the face).
+                                # This uses the face normal for calculation.
+                                tangent = tenonEdge.calc_tangent(connectedLoop)
+                                print("tangent (edge/connected face) = ", tangent)
 
-                            if tangent == longest_side_tangent or tangent == -longest_side_tangent :
-                                heightFaces.append(connectedFace)
-                                
-                                v0 = mat * tenonEdge.verts[0].co
-                                v1 = mat * tenonEdge.verts[1].co
-                                tenonHeightToResize = (v0 - v1).length
-                            else :
-                                thicknessFaces.append(connectedFace)
-                                
-                                v0 = mat * tenonEdge.verts[0].co
-                                v1 = mat * tenonEdge.verts[1].co
-                                tenonThicknessToResize = (v0 - v1).length
+                                if tangent == longest_side_tangent or tangent == -longest_side_tangent :
+                                    heightFaces.append(connectedFace)
+                                    
+                                    v0 = mat * tenonEdge.verts[0].co
+                                    v1 = mat * tenonEdge.verts[1].co
+                                    tenonHeightToResize = (v0 - v1).length
+                                else :
+                                    thicknessFaces.append(connectedFace)
+                                    
+                                    v0 = mat * tenonEdge.verts[0].co
+                                    v1 = mat * tenonEdge.verts[1].co
+                                    tenonThicknessToResize = (v0 - v1).length
 
         # Set tenon thickness
-        bpy.ops.mesh.select_all(action="DESELECT")
-        for faceToResize in thicknessFaces :
-            faceToResize.select = True
-        vector_abs(longest_side_tangent)
-        scale_factor = self.thickness / tenonThicknessToResize
-        resize_value = longest_side_tangent * scale_factor
-        print("resize_value=", resize_value)
-        print("constraint_axis=", constraint_axis_from_tangent(longest_side_tangent))
-        bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(longest_side_tangent), constraint_orientation='LOCAL')
+        if self.thickness_type != "max" :
+            bpy.ops.mesh.select_all(action="DESELECT")
+            for faceToResize in thicknessFaces :
+                faceToResize.select = True
+            vector_abs(longest_side_tangent)
+            scale_factor = self.thickness / tenonThicknessToResize
+            resize_value = longest_side_tangent * scale_factor
+            print("resize_value=", resize_value)
+            print("constraint_axis=", constraint_axis_from_tangent(longest_side_tangent))
+            bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(longest_side_tangent), constraint_orientation='LOCAL')
 
         # Set tenon height
-        bpy.ops.mesh.select_all(action="DESELECT")
-        for faceToResize in heightFaces :
-            faceToResize.select = True
-        vector_abs(shortest_side_tangent)
-        scale_factor = self.height / tenonHeightToResize
-        resize_value = shortest_side_tangent * scale_factor
-        print("resize_value=", resize_value)
-        print("constraint_axis=", constraint_axis_from_tangent(shortest_side_tangent))
-        bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(shortest_side_tangent), constraint_orientation='LOCAL')
-        
+        if self.height_type != "max" :
+            bpy.ops.mesh.select_all(action="DESELECT")
+            for faceToResize in heightFaces :
+                faceToResize.select = True
+            vector_abs(shortest_side_tangent)
+            scale_factor = self.height / tenonHeightToResize
+            resize_value = shortest_side_tangent * scale_factor
+            print("resize_value=", resize_value)
+            print("constraint_axis=", constraint_axis_from_tangent(shortest_side_tangent))
+            bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(shortest_side_tangent), constraint_orientation='LOCAL')
+
         # Extrude to set tenon length
         bpy.ops.mesh.select_all(action="DESELECT")
         tenon.select = True
+        ###### WRONG: SHOULD TAKE GLOBAL TRANSFORM INTO ACCOUNT
         bpy.ops.mesh.extrude_faces_move(TRANSFORM_OT_shrink_fatten={"value":-self.depth})
         
         # Flush selection
@@ -360,6 +427,7 @@ def unregister():
 if __name__ == "__main__":
     register()
     print("Executed")
+
 
 
 
