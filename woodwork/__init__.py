@@ -7,8 +7,7 @@ bl_info = {
     "blender": (2, 71, 0),
     "location": "View3D > Add > Mesh",
     "warning": "", # used for warning icon and text in addons panel
-    "wiki_url": "http://wiki.blender.org/index.php/Extensions:2.5/Py/"
-                "Scripts/My_Script",
+    "wiki_url": "https://github.com/Khrisbie/blender-woodworking",
     "category": "Mesh"}
 
 # import files in package
