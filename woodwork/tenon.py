@@ -1,5 +1,5 @@
 import bpy, bmesh
-from mathutils import Vector
+from mathutils import Vector, Matrix
 from math import pi
 from mathutils.geometry import (distance_point_to_plane)
 from sys import float_info
@@ -274,12 +274,12 @@ class Tenon(bpy.types.Operator):
         l1 = face.loops[1]
         e1 = l1.edge
         
-        mat = obj.matrix_world
-        v0 = mat * e0.verts[0].co
-        v1 = mat * e0.verts[1].co
+        matrix_world = obj.matrix_world
+        v0 = matrix_world * e0.verts[0].co
+        v1 = matrix_world * e0.verts[1].co
         length0 = (v0 - v1).length
-        v0 = mat * e1.verts[0].co
-        v1 = mat * e1.verts[1].co
+        v0 = matrix_world * e1.verts[0].co
+        v1 = matrix_world * e1.verts[1].co
         length1 = (v0 - v1).length        
         
         if (length0 > length1) :
@@ -349,11 +349,11 @@ class Tenon(bpy.types.Operator):
             tangent0 = e0.calc_tangent(l0)
             
             if same_direction(tangent0, shortest_side_tangent) :
-                v0 = mat * e0.verts[0].co
-                v1 = mat * e0.verts[1].co
+                v0 = matrix_world * e0.verts[0].co
+                v1 = matrix_world * e0.verts[1].co
             else :
-                v0 = mat * e1.verts[0].co
-                v1 = mat * e1.verts[1].co
+                v0 = matrix_world * e1.verts[0].co
+                v1 = matrix_world * e1.verts[1].co
             tenonThicknessToResize = (v0 - v1).length
         elif self.thickness_type == "max" :
             # get tenon side facing the longest side
@@ -365,11 +365,11 @@ class Tenon(bpy.types.Operator):
             tangent0 = e0.calc_tangent(l0)
             
             if same_direction(tangent0, longest_side_tangent) :
-                v0 = mat * e0.verts[0].co
-                v1 = mat * e0.verts[1].co
+                v0 = matrix_world * e0.verts[0].co
+                v1 = matrix_world * e0.verts[1].co
             else :
-                v0 = mat * e1.verts[0].co
-                v1 = mat * e1.verts[1].co
+                v0 = matrix_world * e1.verts[0].co
+                v1 = matrix_world * e1.verts[1].co
             tenonHeightToResize = (v0 - v1).length
         else :
             # Find faces to resize to obtain tenon base
@@ -388,14 +388,14 @@ class Tenon(bpy.types.Operator):
                                 if same_direction(tangent,longest_side_tangent) :
                                     heightFaces.append(connectedFace)
                                     
-                                    v0 = mat * tenonEdge.verts[0].co
-                                    v1 = mat * tenonEdge.verts[1].co
+                                    v0 = matrix_world * tenonEdge.verts[0].co
+                                    v1 = matrix_world * tenonEdge.verts[1].co
                                     tenonHeightToResize = (v0 - v1).length
                                 else :
                                     thicknessFaces.append(connectedFace)
                                     
-                                    v0 = mat * tenonEdge.verts[0].co
-                                    v1 = mat * tenonEdge.verts[1].co
+                                    v0 = matrix_world * tenonEdge.verts[0].co
+                                    v1 = matrix_world * tenonEdge.verts[1].co
                                     tenonThicknessToResize = (v0 - v1).length
 
         # Set tenon thickness
@@ -420,37 +420,23 @@ class Tenon(bpy.types.Operator):
 
             bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(shortest_side_tangent), constraint_orientation='LOCAL')
 
-        # Extrude to set tenon length
+        # Extrude and fatten to set tenon length
         bpy.ops.mesh.select_all(action="DESELECT")
         tenon.select = True
-        ###### WRONG: SHOULD TAKE GLOBAL TRANSFORM INTO ACCOUNT
+
         ret = bmesh.ops.extrude_discrete_faces(bm, faces=[tenon])
         
-        rot_mat = obj.matrix_world.to_quaternion()
-        print("rotation_matrix_to_world=", rot_mat)
-        
-        scale = obj.matrix_world.to_scale()
-        print("scale_matrix_to_world=", scale)
-        
+        # get only rotation from matrix_world (no scale or translation)
+        rot_mat = matrix_world.copy().to_3x3().normalized()
+       
         extruded_face = ret['faces'][0]
-        print("normal" , extruded_face.normal)
-        print("normal length", extruded_face.normal.length)
-        normal_world = rot_mat * extruded_face.normal
-        normal_world = Vector((
-            normal_world.x * scale.x,
-            normal_world.y * scale.y,
-            normal_world.z * scale.z))
-        print("normal world", normal_world)
-        print("normal world length", normal_world.length)
-        local_depth = (self.depth * extruded_face.normal.length) / normal_world.length
-        print("local depth", local_depth)
 
-        # vec = f.normal * f.calc_area() * self.factor
-        #bmesh.ops.transform(bm, matrix=Matrix.Translation((0,0,1)), space=bpy.context.object.matrix_world, verts=bm.verts)
-        #bmesh.ops.translate(bm, vec=vec, verts=f.verts
-        
-        #bpy.ops.mesh.extrude_faces_move(MESH_OT_extrude_faces_indiv, TRANSFORM_OT_shrink_fatten={"value":-self.depth})
-        
+        # apply rotation to the normal
+        normal_world = rot_mat * extruded_face.normal
+        normal_world = normal_world * self.depth
+
+        bmesh.ops.translate(bm,  vec=normal_world, space=matrix_world, verts=extruded_face.verts)
+  
         # Flush selection
         bm.select_flush_mode()
         
