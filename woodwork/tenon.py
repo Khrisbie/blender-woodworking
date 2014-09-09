@@ -1,7 +1,8 @@
-import bpy, bmesh, mathutils
+import bpy, bmesh
+from mathutils import Vector
 from math import pi
 from mathutils.geometry import (distance_point_to_plane)
-import sys
+from sys import float_info
 
 # See if the current item should be selected or not
 def selectCheck(isSelected, hasSelected, extend):
@@ -129,7 +130,7 @@ def constraint_axis_from_tangent(tangent) :
 
 def vector_abs(vector) :
     for i in range(len(vector)) : 
-        if (vector[i] < 0) :
+        if (vector[i] < 0.0) :
             vector[i] = abs(vector[i])
 
 
@@ -140,10 +141,21 @@ def nearlyEqual(a, b, epsilon = 0.00001) :
 
     if a == b :
         return True
-    elif (a == 0.0 or b == 0.0 or diff < sys.float_info.min) :
-        return diff < (epsilon * sys.float_info.min);
+    elif (a == 0.0 or b == 0.0 or diff < float_info.min) :
+        return diff < (epsilon * float_info.min)
     else :
-        return diff / (absA + absB) < epsilon;
+        return diff / (absA + absB) < epsilon
+
+
+def zero_element_under_tol(vector, tol = 1e-6):
+     for elem in vector :
+        if abs(elem) < tol :
+            elem = 0
+
+def same_direction(tangent0, tangent1) :
+    angle = tangent0.angle(tangent1)
+
+    return nearlyEqual(angle, 0.0) or nearlyEqual(angle, pi)
     
 class Tenon(bpy.types.Operator):
     bl_description = "Creates a tenon given a face"
@@ -336,7 +348,7 @@ class Tenon(bpy.types.Operator):
             
             tangent0 = e0.calc_tangent(l0)
             
-            if tangent0 == shortest_side_tangent or tangent0 == -shortest_side_tangent :
+            if same_direction(tangent0, shortest_side_tangent) :
                 v0 = mat * e0.verts[0].co
                 v1 = mat * e0.verts[1].co
             else :
@@ -352,7 +364,7 @@ class Tenon(bpy.types.Operator):
             
             tangent0 = e0.calc_tangent(l0)
             
-            if tangent0 == longest_side_tangent or tangent0 == -longest_side_tangent :
+            if same_direction(tangent0, longest_side_tangent) :
                 v0 = mat * e0.verts[0].co
                 v1 = mat * e0.verts[1].co
             else :
@@ -366,16 +378,14 @@ class Tenon(bpy.types.Operator):
                 connectedFaces = tenonEdge.link_faces
                 for connectedFace in connectedFaces:
                     if connectedFace != tenon:
-                        print("Found connected face with index ", connectedFace.index)
                         connectedLoops = tenonEdge.link_loops
                         for connectedLoop in connectedLoops:
                             if connectedLoop.face == connectedFace:
                                 # Return the tangent at this edge relative to a face (pointing inward into the face).
                                 # This uses the face normal for calculation.
                                 tangent = tenonEdge.calc_tangent(connectedLoop)
-                                print("tangent (edge/connected face) = ", tangent)
 
-                                if tangent == longest_side_tangent or tangent == -longest_side_tangent :
+                                if same_direction(tangent,longest_side_tangent) :
                                     heightFaces.append(connectedFace)
                                     
                                     v0 = mat * tenonEdge.verts[0].co
@@ -396,8 +406,7 @@ class Tenon(bpy.types.Operator):
             vector_abs(longest_side_tangent)
             scale_factor = self.thickness / tenonThicknessToResize
             resize_value = longest_side_tangent * scale_factor
-            print("resize_value=", resize_value)
-            print("constraint_axis=", constraint_axis_from_tangent(longest_side_tangent))
+
             bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(longest_side_tangent), constraint_orientation='LOCAL')
 
         # Set tenon height
@@ -408,15 +417,39 @@ class Tenon(bpy.types.Operator):
             vector_abs(shortest_side_tangent)
             scale_factor = self.height / tenonHeightToResize
             resize_value = shortest_side_tangent * scale_factor
-            print("resize_value=", resize_value)
-            print("constraint_axis=", constraint_axis_from_tangent(shortest_side_tangent))
+
             bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(shortest_side_tangent), constraint_orientation='LOCAL')
 
         # Extrude to set tenon length
         bpy.ops.mesh.select_all(action="DESELECT")
         tenon.select = True
         ###### WRONG: SHOULD TAKE GLOBAL TRANSFORM INTO ACCOUNT
-        bpy.ops.mesh.extrude_faces_move(TRANSFORM_OT_shrink_fatten={"value":-self.depth})
+        ret = bmesh.ops.extrude_discrete_faces(bm, faces=[tenon])
+        
+        rot_mat = obj.matrix_world.to_quaternion()
+        print("rotation_matrix_to_world=", rot_mat)
+        
+        scale = obj.matrix_world.to_scale()
+        print("scale_matrix_to_world=", scale)
+        
+        extruded_face = ret['faces'][0]
+        print("normal" , extruded_face.normal)
+        print("normal length", extruded_face.normal.length)
+        normal_world = rot_mat * extruded_face.normal
+        normal_world = Vector((
+            normal_world.x * scale.x,
+            normal_world.y * scale.y,
+            normal_world.z * scale.z))
+        print("normal world", normal_world)
+        print("normal world length", normal_world.length)
+        local_depth = (self.depth * extruded_face.normal.length) / normal_world.length
+        print("local depth", local_depth)
+
+        # vec = f.normal * f.calc_area() * self.factor
+        #bmesh.ops.transform(bm, matrix=Matrix.Translation((0,0,1)), space=bpy.context.object.matrix_world, verts=bm.verts)
+        #bmesh.ops.translate(bm, vec=vec, verts=f.verts
+        
+        #bpy.ops.mesh.extrude_faces_move(MESH_OT_extrude_faces_indiv, TRANSFORM_OT_shrink_fatten={"value":-self.depth})
         
         # Flush selection
         bm.select_flush_mode()
