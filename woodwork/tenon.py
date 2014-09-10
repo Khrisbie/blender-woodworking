@@ -116,8 +116,6 @@ def is_face_rectangular(face, error = 0.0005) :
     for loop in face.loops:
         perp_angle = loop.calc_angle() - (pi / 2)
         if perp_angle < -error or perp_angle > error:
-            print("loop angle = ", loop.calc_angle())
-            print("perp_angle = ", perp_angle)
             return False
     return True
 
@@ -177,7 +175,7 @@ class Tenon(bpy.types.Operator):
                                         subtype = 'DISTANCE',
                                         unit = 'LENGTH',
                                         precision = 3,
-                                        step = 0.01)
+                                        step = 0.1)
 
     height_type = bpy.props.EnumProperty(
         items=[('max', "Max. height", "Set height to the maximum (length of the biggest side)"),
@@ -309,23 +307,24 @@ class Tenon(bpy.types.Operator):
         self.longest_length = longest_length
 
         # Subdivide face
+        edges_to_subdivide = []
         if self.height_type == "max" :
-            bpy.ops.mesh.select_all(action="DESELECT")
             # if tenon height set to maximum, select shortest side edges
             # to subdivide only in this direction
             for edge in shortest_edges :
-                edge.select = True
+                edges_to_subdivide.append(edge)
         elif self.thickness_type == "max" :
-            bpy.ops.mesh.select_all(action="DESELECT")
             # if tenon thickness set to maximum, select longest side edges
             # to subdivide only in this direction
             for edge in longest_edges :
-                edge.select = True
+                edges_to_subdivide.append(edge)
+        else :
+            edges_to_subdivide=face.edges
 
-        bpy.ops.mesh.subdivide(number_cuts=2)
-        
-        # Get the new faces   
-        subdivided_faces = [f for f in faces if f.select]   # list comprehension
+        ret = bmesh.ops.subdivide_edges(bm, edges=edges_to_subdivide, cuts=2, use_grid_fill=True)
+            
+        # Get the new faces
+        subdivided_faces = [bmesh_type for bmesh_type in ret["geom_inner"] if type(bmesh_type) is bmesh.types.BMFace]
         
         # Find tenon face (face containing median center)
         for f in subdivided_faces:
@@ -421,9 +420,6 @@ class Tenon(bpy.types.Operator):
             bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(shortest_side_tangent), constraint_orientation='LOCAL')
 
         # Extrude and fatten to set tenon length
-        bpy.ops.mesh.select_all(action="DESELECT")
-        tenon.select = True
-
         ret = bmesh.ops.extrude_discrete_faces(bm, faces=[tenon])
         
         # get only rotation from matrix_world (no scale or translation)
@@ -436,6 +432,9 @@ class Tenon(bpy.types.Operator):
         normal_world = normal_world * self.depth
 
         bmesh.ops.translate(bm,  vec=normal_world, space=matrix_world, verts=extruded_face.verts)
+        
+        bpy.ops.mesh.select_all(action="DESELECT")
+        extruded_face.select = True
   
         # Flush selection
         bm.select_flush_mode()
