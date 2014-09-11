@@ -165,54 +165,97 @@ class Tenon(bpy.types.Operator):
     longest_length = -1.0
 
     thickness_type = bpy.props.EnumProperty(
-        items=[('max', "Max. thickness", "Set thickness to the maximum (length of the shortest side)"),
-               ('thickness_value', "Value", "Give value to thickness")],
-        name="Thickness type", default='thickness_value')                             
-    thickness = bpy.props.FloatProperty(name = "Thickness",
-                                        description = "Tenon thickness relative to smallest side",
-                                        min = 0.0,
-                                        default = -1,
-                                        subtype = 'DISTANCE',
-                                        unit = 'LENGTH',
-                                        precision = 3,
-                                        step = 0.1)
+        items=[('max',
+                "Max. thickness", 
+                "Set thickness to the maximum (length of the shortest side)"),
+               ('value', 
+                "Value", 
+                "Give value to thickness"),
+               ('percentage', 
+                "Percentage", 
+                "Set thickness by percentage")],
+        name="Thickness type", 
+        default='value')                             
+
+    thickness_value = bpy.props.FloatProperty(
+                    name = "Thickness",
+                    description = "Tenon thickness relative to smallest side",
+                    min = 0.0,
+                    default = -1.0,
+                    subtype = 'DISTANCE',
+                    unit = 'LENGTH',
+                    precision = 3,
+                    step = 0.1)
+
+    thickness_percentage = bpy.props.FloatProperty(
+                    name = "Thickness",
+                    description = "Tenon thickness relative to smallest side",
+                    min = 0.0,
+                    max = 1.0,
+                    subtype = 'PERCENTAGE',
+                    unit = 'LENGTH')
 
     height_type = bpy.props.EnumProperty(
-        items=[('max', "Max. height", "Set height to the maximum (length of the biggest side)"),
-               ('height_value', "Value", "Give value to height")],
-        name="Height type", default='height_value')
+        items=[('max', 
+                "Max. height", 
+                "Set height to the maximum (length of the biggest side)"),
+               ('value', 
+                "Value", 
+                "Give value to height"),
+               ('percentage', 
+                "Percentage", 
+                "Set height by percentage")],
+        name="Height type", 
+        default='value')
                                                 
-    height = bpy.props.FloatProperty(name = "Height",
-                                        description = "Tenon height relative to biggest side",
-                                        min = 0.0,
-                                        default = -1,
-                                        subtype = 'DISTANCE',
-                                        unit ='LENGTH',
-                                        precision = 3,
-                                        step = 0.1)
+    height_value = bpy.props.FloatProperty(
+                        name = "Height",
+                        description = "Tenon height relative to biggest side",
+                        min = 0.0,
+                        default = -1.0,
+                        subtype = 'DISTANCE',
+                        unit ='LENGTH',
+                        precision = 3,
+                        step = 0.1)
+                        
+    height_percentage = bpy.props.FloatProperty(
+                    name = "Height",
+                    description = "Tenon height relative to biggest side",
+                    min = 0.0,
+                    max = 1.0,
+                    subtype = 'PERCENTAGE',
+                    unit = 'LENGTH')
 
-    depth = bpy.props.FloatProperty(name = "Depth",
-                          description = "Tenon depth",
-                          min = 0.0,
-                          default = -1,
-                          subtype = 'DISTANCE',
-                          unit = 'LENGTH',
-                          precision = 3,
-                          step = 0.1)
+    depth_value = bpy.props.FloatProperty(
+                        name = "Depth",
+                        description = "Tenon depth",
+                        min = 0.0,
+                        default = -1.0,
+                        subtype = 'DISTANCE',
+                        unit = 'LENGTH',
+                        precision = 3,
+                        step = 0.1)
 
     def draw(self, context):
         layout = self.layout
 
         thicknessBox = layout.box()
-        thicknessBox.prop(self, "thickness_type")
-        if self.thickness_type == "thickness_value" :
-            thicknessBox.prop(self, "thickness")
+        thicknessBox.label(text="Thickness type")
+        thicknessBox.prop(self, "thickness_type", text = "")
+        if self.thickness_type == "value":
+            thicknessBox.prop(self, "thickness_value", text = "")
+        elif self.thickness_type == "percentage":
+            thicknessBox.prop(self, "thickness_percentage", text = "", slider = True)
         
         heightBox = layout.box()
-        heightBox.prop(self, "height_type")
-        if self.height_type == "height_value" :
-            heightBox.prop(self, "height")
-        layout.prop(self, "depth")
+        heightBox.label(text="Height type")
+        heightBox.prop(self, "height_type", text = "")
+        if self.height_type == "value" :
+            heightBox.prop(self, "height_value", text = "")
+        elif self.height_type == "percentage":
+            heightBox.prop(self, "height_percentage", text = "", slider = True)
+
+        layout.prop(self, "depth_value")
 
 
     @classmethod
@@ -296,36 +339,54 @@ class Tenon(bpy.types.Operator):
             longest_length = length1
         
         # Init default values, look if face has changed too
-        if self.thickness == -1 or (not nearlyEqual(shortest_length, self.shortest_length)) :
-            self.thickness = shortest_length / 3.0
-        if self.height == -1 or (not nearlyEqual(longest_length, self.longest_length)) :
-            self.height = (longest_length * 2.0) / 3.0
-        if self.depth == -1 or (not nearlyEqual(longest_length, self.longest_length)) :
-            self.depth = longest_length
+        if self.thickness_value == -1.0 or (not nearlyEqual(shortest_length, self.shortest_length)) :
+            self.thickness_value = shortest_length / 3.0
+            self.thickness_percentage = 1.0 / 3.0
+        if self.height_value == -1.0 or (not nearlyEqual(longest_length, self.longest_length)) :
+            self.height_value = (longest_length * 2.0) / 3.0
+            self.height_percentage = 2.0 / 3.0
+        if self.depth_value == -1.0 or (not nearlyEqual(longest_length, self.longest_length)) :
+            self.depth_value = longest_length
         
         self.shortest_length = shortest_length    # used to reinit default values when face changes
         self.longest_length = longest_length
+        
+        # If percentage specified, compute length values
+        if self.thickness_type == "percentage":
+            self.thickness_value = shortest_length * self.thickness_percentage
+            
+        if self.height_type == "percentage":
+            self.height_value = longest_length * self.height_percentage
 
         # Subdivide face
         edges_to_subdivide = []
-        if self.height_type == "max" :
+        if self.height_type == "max":
             # if tenon height set to maximum, select shortest side edges
             # to subdivide only in this direction
             for edge in shortest_edges :
                 edges_to_subdivide.append(edge)
-        elif self.thickness_type == "max" :
+
+        elif self.thickness_type == "max":
             # if tenon thickness set to maximum, select longest side edges
             # to subdivide only in this direction
             for edge in longest_edges :
                 edges_to_subdivide.append(edge)
-        else :
+        else:
             edges_to_subdivide=face.edges
-
-        ret = bmesh.ops.subdivide_edges(bm, edges=edges_to_subdivide, cuts=2, use_grid_fill=True)
-            
-        # Get the new faces
-        subdivided_faces = [bmesh_type for bmesh_type in ret["geom_inner"] if type(bmesh_type) is bmesh.types.BMFace]
         
+        ret = bmesh.ops.subdivide_edges(bm, edges=edges_to_subdivide, cuts=2, use_grid_fill=True)
+       
+        # Get the new faces
+        
+        # Can't rely on Faces as certain faces are not tagged when only two edges are subdivided
+        # see  source / blender / bmesh / operators / bmo_subdivide.c
+        #subdivided_faces = [bmesh_type for bmesh_type in ret["geom"] if type(bmesh_type) is bmesh.types.BMFace]
+        new_edges = [bmesh_type for bmesh_type in ret["geom_inner"] if type(bmesh_type) is bmesh.types.BMEdge]
+        subdivided_faces = set()
+        for new_edge in new_edges:
+            for linked_face in new_edge.link_faces:
+                subdivided_faces.add(linked_face)
+         
         # Find tenon face (face containing median center)
         for f in subdivided_faces:
             if bmesh.geometry.intersect_face_point(f, median):
@@ -403,7 +464,7 @@ class Tenon(bpy.types.Operator):
             for faceToResize in thicknessFaces :
                 faceToResize.select = True
             vector_abs(longest_side_tangent)
-            scale_factor = self.thickness / tenonThicknessToResize
+            scale_factor = self.thickness_value / tenonThicknessToResize
             resize_value = longest_side_tangent * scale_factor
 
             bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(longest_side_tangent), constraint_orientation='LOCAL')
@@ -414,7 +475,7 @@ class Tenon(bpy.types.Operator):
             for faceToResize in heightFaces :
                 faceToResize.select = True
             vector_abs(shortest_side_tangent)
-            scale_factor = self.height / tenonHeightToResize
+            scale_factor = self.height_value / tenonHeightToResize
             resize_value = shortest_side_tangent * scale_factor
 
             bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(shortest_side_tangent), constraint_orientation='LOCAL')
@@ -429,7 +490,7 @@ class Tenon(bpy.types.Operator):
 
         # apply rotation to the normal
         normal_world = rot_mat * extruded_face.normal
-        normal_world = normal_world * self.depth
+        normal_world = normal_world * self.depth_value
 
         bmesh.ops.translate(bm,  vec=normal_world, space=matrix_world, verts=extruded_face.verts)
         
