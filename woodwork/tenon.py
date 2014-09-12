@@ -161,13 +161,17 @@ class Tenon(bpy.types.Operator):
     bl_label = "Tenon"
     bl_options = {'REGISTER','UNDO'}
     
+    #
+    # Class variables
+    #
+    
     shortest_length = -1.0
     longest_length = -1.0
 
     thickness_type = bpy.props.EnumProperty(
         items=[('max',
                 "Max. thickness", 
-                "Set thickness to the maximum (length of the shortest side)"),
+                "Set thickness to the maximum width"),
                ('value', 
                 "Value", 
                 "Give value to thickness"),
@@ -179,7 +183,7 @@ class Tenon(bpy.types.Operator):
 
     thickness_value = bpy.props.FloatProperty(
                     name = "Thickness",
-                    description = "Tenon thickness relative to smallest side",
+                    description = "Tenon thickness relative to width side",
                     min = 0.0,
                     default = -1.0,
                     subtype = 'DISTANCE',
@@ -189,16 +193,36 @@ class Tenon(bpy.types.Operator):
 
     thickness_percentage = bpy.props.FloatProperty(
                     name = "Thickness",
-                    description = "Tenon thickness relative to smallest side",
+                    description = "Tenon thickness relative to width side",
                     min = 0.0,
                     max = 1.0,
                     subtype = 'PERCENTAGE',
                     unit = 'LENGTH')
+                    
+    thickness_centered = bpy.props.BoolProperty(
+                    name = "Centered",
+                    description = "Specify if tenon is centered on width side",
+                    default = True)
 
+    thickness_shoulder = bpy.props.FloatProperty(
+                    name = "Shoulder",
+                    description = "Tenon shoulder on width side",
+                    min = 0.0,
+                    default = -1.0,
+                    subtype = 'DISTANCE',
+                    unit = 'LENGTH',
+                    precision = 3,
+                    step = 0.1)                    
+
+    thickness_reverse_shoulder = bpy.props.BoolProperty(
+                    name = "Reverse shoulder",
+                    description = "Specify shoulder for the other side",
+                    default = False)
+                    
     height_type = bpy.props.EnumProperty(
         items=[('max', 
                 "Max. height", 
-                "Set height to the maximum (length of the biggest side)"),
+                "Set height to the maximum length"),
                ('value', 
                 "Value", 
                 "Give value to height"),
@@ -210,7 +234,7 @@ class Tenon(bpy.types.Operator):
                                                 
     height_value = bpy.props.FloatProperty(
                         name = "Height",
-                        description = "Tenon height relative to biggest side",
+                        description = "Tenon height relative to length side",
                         min = 0.0,
                         default = -1.0,
                         subtype = 'DISTANCE',
@@ -220,11 +244,31 @@ class Tenon(bpy.types.Operator):
                         
     height_percentage = bpy.props.FloatProperty(
                     name = "Height",
-                    description = "Tenon height relative to biggest side",
+                    description = "Tenon height relative to length side",
                     min = 0.0,
                     max = 1.0,
                     subtype = 'PERCENTAGE',
                     unit = 'LENGTH')
+
+    height_centered = bpy.props.BoolProperty(
+                    name = "Centered",
+                    description = "Specify if tenon is centered on length side",
+                    default = True)
+
+    height_shoulder = bpy.props.FloatProperty(
+                    name = "Shoulder",
+                    description = "Tenon shoulder on length side",
+                    min = 0.0,
+                    default = -1.0,
+                    subtype = 'DISTANCE',
+                    unit = 'LENGTH',
+                    precision = 3,
+                    step = 0.1)
+
+    height_reverse_shoulder = bpy.props.BoolProperty(
+                    name = "Reverse shoulder",
+                    description = "Specify shoulder for the other side",
+                    default = False)
 
     depth_value = bpy.props.FloatProperty(
                         name = "Depth",
@@ -235,29 +279,92 @@ class Tenon(bpy.types.Operator):
                         unit = 'LENGTH',
                         precision = 3,
                         step = 0.1)
+    
+    # Subdivide given edges and return created faces
+    def __subdivide_edges(self, bm, edges_to_subdivide):
+        ret = bmesh.ops.subdivide_edges(bm, edges=edges_to_subdivide, cuts=2, use_grid_fill=True)
+       
+        # Get the new faces
+        
+        # Can't rely on Faces as certain faces are not tagged when only two edges are subdivided
+        # see  source / blender / bmesh / operators / bmo_subdivide.c
+        #subdivided_faces = [bmesh_type for bmesh_type in ret["geom"] if type(bmesh_type) is bmesh.types.BMFace]
+        new_edges = [bmesh_type for bmesh_type in ret["geom_inner"] if type(bmesh_type) is bmesh.types.BMEdge]
+        subdivided_faces = set()
+        for new_edge in new_edges:
+            for linked_face in new_edge.link_faces:
+                subdivided_faces.add(linked_face)
+        return subdivided_faces
+       
+    # Extrude and fatten to set tenon length                 
+    def __set_tenon_depth(self, bm, matrix_world, tenon_face):
 
+        ret = bmesh.ops.extrude_discrete_faces(bm, faces=[tenon_face])
+        
+        # get only rotation from matrix_world (no scale or translation)
+        rot_mat = matrix_world.copy().to_3x3().normalized()
+       
+        extruded_face = ret['faces'][0]
+
+        # apply rotation to the normal
+        normal_world = rot_mat * extruded_face.normal
+        normal_world = normal_world * self.depth_value
+
+        bmesh.ops.translate(bm,  vec=normal_world, space=matrix_world, verts=extruded_face.verts)
+        
+        bpy.ops.mesh.select_all(action="DESELECT")
+        extruded_face.select = True
+
+    def __resize_faces(self, faces, side_tangent, scale_factor):
+            
+        bpy.ops.mesh.select_all(action="DESELECT")
+        for faceToResize in faces :
+            faceToResize.select = True
+
+        vector_abs(side_tangent)
+        resize_value = side_tangent * scale_factor
+
+        bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(side_tangent), constraint_orientation='LOCAL')
+
+    # Custom layout
     def draw(self, context):
         layout = self.layout
 
-        thicknessBox = layout.box()
-        thicknessBox.label(text="Thickness type")
-        thicknessBox.prop(self, "thickness_type", text = "")
-        if self.thickness_type == "value":
-            thicknessBox.prop(self, "thickness_value", text = "")
-        elif self.thickness_type == "percentage":
-            thicknessBox.prop(self, "thickness_percentage", text = "", slider = True)
+        layout.label(text = "Width side")
         
-        heightBox = layout.box()
-        heightBox.label(text="Height type")
-        heightBox.prop(self, "height_type", text = "")
+        widthSideBox = layout.box()
+        widthSideBox.label(text="Thickness type")
+        widthSideBox.prop(self, "thickness_type", text = "")
+        if self.thickness_type == "value":
+            widthSideBox.prop(self, "thickness_value", text = "")
+        elif self.thickness_type == "percentage":
+            widthSideBox.prop(self, "thickness_percentage", text = "", slider = True)
+        widthSideBox.label(text="Position")
+        widthSideBox.prop(self, "thickness_centered")
+        if self.thickness_centered == False:
+            widthSideBox.prop(self, "thickness_shoulder")
+            widthSideBox.prop(self, "thickness_reverse_shoulder")
+        
+        layout.label(text = "Length side")
+        
+        lengthSideBox = layout.box()
+        lengthSideBox.label(text="Height type")
+        lengthSideBox.prop(self, "height_type", text = "")
         if self.height_type == "value" :
-            heightBox.prop(self, "height_value", text = "")
+            lengthSideBox.prop(self, "height_value", text = "")
         elif self.height_type == "percentage":
-            heightBox.prop(self, "height_percentage", text = "", slider = True)
+            lengthSideBox.prop(self, "height_percentage", text = "", slider = True)
+        lengthSideBox.label(text="Position")
+        lengthSideBox.prop(self, "height_centered")
+        if self.thickness_centered == False:
+            lengthSideBox.prop(self, "height_shoulder")
+            lengthSideBox.prop(self, "height_reverse_shoulder")
 
-        layout.prop(self, "depth_value")
+        layout.label(text = "Depth")
+        layout.prop(self, "depth_value", text = "")
 
 
+    # used to check if the operator can run
     @classmethod
     def poll(cls, context):
         ob = context.active_object
@@ -357,6 +464,10 @@ class Tenon(bpy.types.Operator):
             
         if self.height_type == "percentage":
             self.height_value = longest_length * self.height_percentage
+        
+        # Compute values linked to shoulder size
+        if self.thickness_centered == True:
+            self.thickness_shoulder = (longest_length - self.height_value) / 2.0
 
         # Subdivide face
         edges_to_subdivide = []
@@ -374,19 +485,8 @@ class Tenon(bpy.types.Operator):
         else:
             edges_to_subdivide=face.edges
         
-        ret = bmesh.ops.subdivide_edges(bm, edges=edges_to_subdivide, cuts=2, use_grid_fill=True)
-       
-        # Get the new faces
-        
-        # Can't rely on Faces as certain faces are not tagged when only two edges are subdivided
-        # see  source / blender / bmesh / operators / bmo_subdivide.c
-        #subdivided_faces = [bmesh_type for bmesh_type in ret["geom"] if type(bmesh_type) is bmesh.types.BMFace]
-        new_edges = [bmesh_type for bmesh_type in ret["geom_inner"] if type(bmesh_type) is bmesh.types.BMEdge]
-        subdivided_faces = set()
-        for new_edge in new_edges:
-            for linked_face in new_edge.link_faces:
-                subdivided_faces.add(linked_face)
-         
+        subdivided_faces = self.__subdivide_edges(bm, edges_to_subdivide)
+
         # Find tenon face (face containing median center)
         for f in subdivided_faces:
             if bmesh.geometry.intersect_face_point(f, median):
@@ -460,42 +560,16 @@ class Tenon(bpy.types.Operator):
 
         # Set tenon thickness
         if self.thickness_type != "max" :
-            bpy.ops.mesh.select_all(action="DESELECT")
-            for faceToResize in thicknessFaces :
-                faceToResize.select = True
-            vector_abs(longest_side_tangent)
             scale_factor = self.thickness_value / tenonThicknessToResize
-            resize_value = longest_side_tangent * scale_factor
-
-            bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(longest_side_tangent), constraint_orientation='LOCAL')
+            self.__resize_faces(thicknessFaces, longest_side_tangent, scale_factor)
 
         # Set tenon height
         if self.height_type != "max" :
-            bpy.ops.mesh.select_all(action="DESELECT")
-            for faceToResize in heightFaces :
-                faceToResize.select = True
-            vector_abs(shortest_side_tangent)
             scale_factor = self.height_value / tenonHeightToResize
-            resize_value = shortest_side_tangent * scale_factor
+            self.__resize_faces(heightFaces, shortest_side_tangent, scale_factor)
 
-            bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(shortest_side_tangent), constraint_orientation='LOCAL')
-
-        # Extrude and fatten to set tenon length
-        ret = bmesh.ops.extrude_discrete_faces(bm, faces=[tenon])
-        
-        # get only rotation from matrix_world (no scale or translation)
-        rot_mat = matrix_world.copy().to_3x3().normalized()
-       
-        extruded_face = ret['faces'][0]
-
-        # apply rotation to the normal
-        normal_world = rot_mat * extruded_face.normal
-        normal_world = normal_world * self.depth_value
-
-        bmesh.ops.translate(bm,  vec=normal_world, space=matrix_world, verts=extruded_face.verts)
-        
-        bpy.ops.mesh.select_all(action="DESELECT")
-        extruded_face.select = True
+        # Set tenon depth
+        self.__set_tenon_depth(bm, matrix_world, tenon)
   
         # Flush selection
         bm.select_flush_mode()
