@@ -1,7 +1,7 @@
 import bpy, bmesh
 from mathutils import Vector, Matrix
 from math import pi
-from mathutils.geometry import (distance_point_to_plane)
+from mathutils.geometry import (distance_point_to_plane, intersect_point_line)
 from sys import float_info
 
 # See if the current item should be selected or not
@@ -154,7 +154,15 @@ def same_direction(tangent0, tangent1) :
     angle = tangent0.angle(tangent1)
 
     return nearlyEqual(angle, 0.0) or nearlyEqual(angle, pi)
-    
+
+def distance_point_edge(pt, edge):
+    line_p1 = edge.verts[0].co
+    line_p2 = edge.verts[1].co
+    ret = intersect_point_line(pt, line_p1, line_p2)
+    closest_point_on_line = ret[0]
+    distance_vector = closest_point_on_line - pt
+    return distance_vector.length
+
 class Tenon(bpy.types.Operator):
     bl_description = "Creates a tenon given a face"
     bl_idname = "mesh.tenon"
@@ -356,7 +364,7 @@ class Tenon(bpy.types.Operator):
             lengthSideBox.prop(self, "height_percentage", text = "", slider = True)
         lengthSideBox.label(text="Position")
         lengthSideBox.prop(self, "height_centered")
-        if self.thickness_centered == False:
+        if self.height_centered == False:
             lengthSideBox.prop(self, "height_shoulder")
             lengthSideBox.prop(self, "height_reverse_shoulder")
 
@@ -377,11 +385,9 @@ class Tenon(bpy.types.Operator):
         mesh = obj.data
         
         if mesh.is_editmode:
-            print("In edit mode")
             # Gain direct access to the mesh
             bm = bmesh.from_edit_mesh(mesh)
         else:
-            print("In object mode")
             # Create a bmesh from mesh
             # (won't affect mesh, unless explicitly written back)
             bm = bmesh.new()
@@ -453,7 +459,7 @@ class Tenon(bpy.types.Operator):
             self.height_value = (longest_length * 2.0) / 3.0
             self.height_percentage = 2.0 / 3.0
         if self.depth_value == -1.0 or (not nearlyEqual(longest_length, self.longest_length)) :
-            self.depth_value = longest_length
+            self.depth_value = shortest_length
         
         self.shortest_length = shortest_length    # used to reinit default values when face changes
         self.longest_length = longest_length
@@ -498,6 +504,8 @@ class Tenon(bpy.types.Operator):
         
         thicknessFaces.append(tenon)
         heightFaces.append(tenon)
+        thickness_reference_edge = None
+        height_reference_edge = None
         
         if self.height_type == "max" :
             # get tenon side facing the smallest side
@@ -548,29 +556,121 @@ class Tenon(bpy.types.Operator):
                                 if same_direction(tangent,longest_side_tangent) :
                                     heightFaces.append(connectedFace)
                                     
-                                    v0 = matrix_world * tenonEdge.verts[0].co
-                                    v1 = matrix_world * tenonEdge.verts[1].co
-                                    tenonHeightToResize = (v0 - v1).length
+                                    if height_reference_edge == None:
+                                        height_reference_edge = tenonEdge
+                                    
+
                                 else :
                                     thicknessFaces.append(connectedFace)
                                     
-                                    v0 = matrix_world * tenonEdge.verts[0].co
-                                    v1 = matrix_world * tenonEdge.verts[1].co
-                                    tenonThicknessToResize = (v0 - v1).length
+                                    if thickness_reference_edge == None:
+                                        thickness_reference_edge = tenonEdge
+                                    
+                                        v0 = matrix_world * tenonEdge.verts[0].co
+                                        v1 = matrix_world * tenonEdge.verts[1].co
+                                        tenonThicknessToResize = (v0 - v1).length
+
+        # Set tenon shoulder on width side
+        if self.thickness_centered == False:
+
+            for face in thicknessFaces:
+                if face != tenon:
+                    shoulder = face
+                    origin_face_edge = shortest_edges[0] # TODO : take the edge that match shoulder face
+                    break
+                
+            # find faces to scale        
+            shoulderFaces = [shoulder]
+            thickness_shoulder_reference_edge = None
+
+            for edge in shoulder.edges:
+                
+                connectedFaces = edge.link_faces
+                for connectedFace in connectedFaces:
+
+                    if connectedFace != shoulder:
+                        connectedLoops = edge.link_loops
+                        for connectedLoop in connectedLoops:
+                            if connectedLoop.face == shoulder:
+                                tangent = edge.calc_tangent(connectedLoop)
+
+                                if same_direction(tangent,longest_side_tangent):
+                                    shoulderFaces.append(connectedFace)
+                                    
+                                    if thickness_shoulder_reference_edge == None:
+                                        thickness_shoulder_reference_edge = edge
+                                        
+                                        
+            # find vertices to move (those are vertices in both shoulderFaces and heightFaces)
+            shoulderVerts = set()
+            for face in shoulderFaces:
+                verts = face.verts
+                for vert in verts:
+                    shoulderVerts.add(vert)
+            heightVerts = set()
+            for face in heightFaces:
+                verts = face.verts
+                for vert in verts:
+                    heightVerts.add(vert)
+            verts_to_translate = shoulderVerts.intersection(heightVerts)
+
+            # compute scale factor                        
+
+            pt1 = thickness_shoulder_reference_edge.verts[1].co
+            pt0 = thickness_shoulder_reference_edge.verts[0].co
+
+            length1 = distance_point_edge(pt1, origin_face_edge)
+            length0 = distance_point_edge(pt0, origin_face_edge)
+            if (length1 > length0):
+                edge_vector = (matrix_world * pt1) - (matrix_world * pt0)
+            else:
+                edge_vector = (matrix_world * pt0) - (matrix_world * pt1)
+            shoulder_length_to_resize = edge_vector.length
+            scale_factor = self.thickness_shoulder / shoulder_length_to_resize
+            final_vector = edge_vector * scale_factor
+            translate_vector = final_vector - edge_vector
+
+            # Slide tenon edge to set the distance between the face border and the tenon
+            bmesh.ops.translate(bm, vec=translate_vector, space=matrix_world, verts=list(verts_to_translate))
 
         # Set tenon thickness
-        if self.thickness_type != "max" :
+        if self.thickness_type != "max":
             scale_factor = self.thickness_value / tenonThicknessToResize
             self.__resize_faces(thicknessFaces, longest_side_tangent, scale_factor)
 
+
         # Set tenon height
-        if self.height_type != "max" :
+        if self.height_type != "max":
+
+            v0 = matrix_world * height_reference_edge.verts[0].co
+            v1 = matrix_world * height_reference_edge.verts[1].co
+            tenonHeightToResize = (v0 - v1).length
             scale_factor = self.height_value / tenonHeightToResize
-            self.__resize_faces(heightFaces, shortest_side_tangent, scale_factor)
+
+            if self.thickness_centered == True:
+                # centered
+                self.__resize_faces(heightFaces, shortest_side_tangent, scale_factor)
+            else:
+                # shouldered
+                verts_to_translate = heightVerts.difference(shoulderVerts)
+                
+                pt1 = height_reference_edge.verts[1].co
+                pt0 = height_reference_edge.verts[0].co
+
+                length1 = distance_point_edge(pt1, origin_face_edge)
+                length0 = distance_point_edge(pt0, origin_face_edge)
+
+                if (length1 > length0):
+                    edge_vector = (matrix_world * pt1) - (matrix_world * pt0)
+                else:
+                    edge_vector = (matrix_world * pt0) - (matrix_world * pt1)
+                final_vector = edge_vector * scale_factor
+                translate_vector = final_vector - edge_vector
+                bmesh.ops.translate(bm, vec=translate_vector, space=matrix_world, verts=list(verts_to_translate))
 
         # Set tenon depth
         self.__set_tenon_depth(bm, matrix_world, tenon)
-  
+      
         # Flush selection
         bm.select_flush_mode()
         
