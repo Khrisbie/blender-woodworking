@@ -466,15 +466,34 @@ class Tenon(bpy.types.Operator):
         
         # If percentage specified, compute length values
         if self.thickness_type == "percentage":
-            self.thickness_value = shortest_length * self.thickness_percentage
+            if self.height_centered == False:
+                self.thickness_value = (shortest_length - self.height_shoulder) * self.thickness_percentage
+            else:
+                self.thickness_value = shortest_length * self.thickness_percentage
             
         if self.height_type == "percentage":
-            self.height_value = longest_length * self.height_percentage
+            if self.thickness_centered == False:
+                self.height_value = (longest_length - self.thickness_shoulder) * self.height_percentage
+            else:
+                self.height_value = longest_length * self.height_percentage
         
-        # Compute values linked to shoulder size
+        # Init values linked to shoulder size
         if self.thickness_centered == True:
             self.thickness_shoulder = (longest_length - self.height_value) / 2.0
-
+        if self.height_centered == True:
+            self.height_shoulder = (shortest_length - self.thickness_value) / 2.0
+            
+        # Check input values
+        if self.thickness_shoulder + self.height_value > longest_length:
+            self.report({'ERROR_INVALID_INPUT'},
+                        "Size of width size shoulder and tenon height are too long.")
+            return {'CANCELLED'}
+        
+        if self.height_shoulder + self.thickness_value > shortest_length:
+            self.report({'ERROR_INVALID_INPUT'},
+                        "Size of length size shoulder and tenon thickness are too long.")
+            return {'CANCELLED'}
+        
         # Subdivide face
         edges_to_subdivide = []
         if self.height_type == "max":
@@ -573,11 +592,20 @@ class Tenon(bpy.types.Operator):
         # Set tenon shoulder on width side
         if self.thickness_centered == False:
 
+            shoulder = None
             for face in thicknessFaces:
                 if face != tenon:
-                    shoulder = face
-                    origin_face_edge = shortest_edges[0] # TODO : take the edge that match shoulder face
-                    break
+                    if self.thickness_reverse_shoulder == True:
+                        if shoulder != None:
+                            shoulder = face
+                            origin_face_edge = shortest_edges[1]  # TODO : take the edge that match shoulder face
+                            break
+                        else:
+                            shoulder = face
+                    else:
+                        shoulder = face    
+                        origin_face_edge = shortest_edges[0] # TODO : take the edge that match shoulder face
+                        break
                 
             # find faces to scale        
             shoulderFaces = [shoulder]
@@ -642,9 +670,12 @@ class Tenon(bpy.types.Operator):
         # Set tenon height
         if self.height_type != "max":
 
-            v0 = matrix_world * height_reference_edge.verts[0].co
-            v1 = matrix_world * height_reference_edge.verts[1].co
-            tenonHeightToResize = (v0 - v1).length
+            v0 = height_reference_edge.verts[0].co
+            v1 = height_reference_edge.verts[1].co
+
+            v0_world = matrix_world * v0
+            v1_world = matrix_world * v1
+            tenonHeightToResize = (v0_world - v1_world).length
             scale_factor = self.height_value / tenonHeightToResize
 
             if self.thickness_centered == True:
@@ -654,16 +685,13 @@ class Tenon(bpy.types.Operator):
                 # shouldered
                 verts_to_translate = heightVerts.difference(shoulderVerts)
                 
-                pt1 = height_reference_edge.verts[1].co
-                pt0 = height_reference_edge.verts[0].co
-
-                length1 = distance_point_edge(pt1, origin_face_edge)
-                length0 = distance_point_edge(pt0, origin_face_edge)
+                length1 = distance_point_edge(v1, origin_face_edge)
+                length0 = distance_point_edge(v0, origin_face_edge)
 
                 if (length1 > length0):
-                    edge_vector = (matrix_world * pt1) - (matrix_world * pt0)
+                    edge_vector = v1_world - v0_world
                 else:
-                    edge_vector = (matrix_world * pt0) - (matrix_world * pt1)
+                    edge_vector = v0_world - v1_world
                 final_vector = edge_vector * scale_factor
                 translate_vector = final_vector - edge_vector
                 bmesh.ops.translate(bm, vec=translate_vector, space=matrix_world, verts=list(verts_to_translate))
