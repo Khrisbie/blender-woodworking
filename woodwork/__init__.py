@@ -15,20 +15,24 @@ bl_info = {
 if "bpy" in locals():
     print("Reloading WoodWorking v %d.%d" % bl_info["version"])
     import imp
+    imp.reload(tenon_properties)
     imp.reload(tenon)
     imp.reload(main_panel)
 
 else:
     print("Loading WoodWorking v %d.%d" % bl_info["version"])
+    from . import tenon_properties
     from . import tenon
     from . import main_panel
 
 # registration
 def register():
+    tenon_properties.register()
     tenon.register()
     main_panel.register()
   
 def unregister():
+    tenon_properties.unregister()
     tenon.unregister()
     main_panel.unregister()
 
