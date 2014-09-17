@@ -176,6 +176,16 @@ class Tenon(bpy.types.Operator):
                     description = "Specify if tenon is centered on width side",
                     default = True)
 
+    thickness_shoulder_type = bpy.props.EnumProperty(
+        items=[('value', 
+                "Value", 
+                "Give value to shoulder thickness"),
+               ('percentage', 
+                "Percentage", 
+                "Set thickness shoulder by percentage")],
+        name="Thickness shoulder type", 
+        default='value')
+
     thickness_shoulder_value = bpy.props.FloatProperty(
                     name = "Shoulder",
                     description = "Tenon shoulder on width side",
@@ -185,6 +195,14 @@ class Tenon(bpy.types.Operator):
                     unit = 'LENGTH',
                     precision = 3,
                     step = 0.1)
+
+    thickness_shoulder_percentage = bpy.props.FloatProperty(
+                    name = "Shoulder",
+                    description = "Tenon shoulder (relative to width side)",
+                    min = 0.0,
+                    max = 1.0,
+                    subtype = 'PERCENTAGE',
+                    unit = 'LENGTH')
 
     thickness_reverse_shoulder = bpy.props.BoolProperty(
                     name = "Reverse shoulder",
@@ -227,6 +245,16 @@ class Tenon(bpy.types.Operator):
                     description = "Specify if tenon is centered on length side",
                     default = True)
 
+    height_shoulder_type = bpy.props.EnumProperty(
+        items=[('value', 
+                "Value", 
+                "Give value to shoulder height"),
+               ('percentage', 
+                "Percentage", 
+                "Set shoulder height by percentage")],
+        name="Height shoulder type", 
+        default='value')
+
     height_shoulder_value = bpy.props.FloatProperty(
                     name = "Shoulder",
                     description = "Tenon shoulder on length side",
@@ -236,6 +264,14 @@ class Tenon(bpy.types.Operator):
                     unit = 'LENGTH',
                     precision = 3,
                     step = 0.1)
+
+    height_shoulder_percentage = bpy.props.FloatProperty(
+                    name = "Shoulder",
+                    description = "Tenon shoulder (relative to length side)",
+                    min = 0.0,
+                    max = 1.0,
+                    subtype = 'PERCENTAGE',
+                    unit = 'LENGTH')
 
     height_reverse_shoulder = bpy.props.BoolProperty(
                     name = "Reverse shoulder",
@@ -314,7 +350,12 @@ class Tenon(bpy.types.Operator):
         widthSideBox.label(text="Position")
         widthSideBox.prop(self, "thickness_centered")
         if self.thickness_centered == False:
-            widthSideBox.prop(self, "thickness_shoulder_value")
+            widthSideBox.label(text="Thickness shoulder type")
+            widthSideBox.prop(self, "thickness_shoulder_type", text = "")
+            if self.thickness_shoulder_type == "value":            
+                widthSideBox.prop(self, "thickness_shoulder_value")
+            elif self.thickness_shoulder_type == "percentage":
+                widthSideBox.prop(self, "thickness_shoulder_percentage", text = "", slider = True)
             widthSideBox.prop(self, "thickness_reverse_shoulder")
 
         layout.label(text = "Length side")
@@ -329,7 +370,12 @@ class Tenon(bpy.types.Operator):
         lengthSideBox.label(text="Position")
         lengthSideBox.prop(self, "height_centered")
         if self.height_centered == False:
-            lengthSideBox.prop(self, "height_shoulder_value")
+            lengthSideBox.label(text="Height shoulder type")
+            lengthSideBox.prop(self, "height_shoulder_type", text = "")
+            if self.height_shoulder_type == "value" :
+                lengthSideBox.prop(self, "height_shoulder_value")
+            elif self.height_shoulder_type == "percentage":
+                lengthSideBox.prop(self, "height_shoulder_percentage", text = "", slider = True)
             lengthSideBox.prop(self, "height_reverse_shoulder")
 
         layout.label(text = "Depth")
@@ -430,22 +476,25 @@ class Tenon(bpy.types.Operator):
 
         # If percentage specified, compute length values
         if self.thickness_type == "percentage":
-            if self.thickness_centered == False:
-                self.thickness_value = (shortest_length - self.thickness_shoulder_value) * self.thickness_percentage
-            else:
-                self.thickness_value = shortest_length * self.thickness_percentage
+            self.thickness_value = shortest_length * self.thickness_percentage
 
         if self.height_type == "percentage":
-            if self.height_centered == False:
-                self.height_value = (longest_length - self.height_shoulder_value) * self.height_percentage
-            else:
-                self.height_value = longest_length * self.height_percentage
+            self.height_value = longest_length * self.height_percentage
 
         # Init values linked to shoulder size
         if self.thickness_centered == True:
             self.thickness_shoulder_value = (shortest_length - self.thickness_value) / 2.0
+            self.thickness_shoulder_percentage = self.thickness_shoulder_value / shortest_length
         if self.height_centered == True:
             self.height_shoulder_value = (longest_length - self.height_value) / 2.0
+            self.height_shoulder_percentage = self.height_shoulder_value / longest_length
+        
+        # If shoulder percentage specified, compute length values
+        if self.thickness_shoulder_type == "percentage":
+            self.thickness_shoulder_value = shortest_length * self.thickness_shoulder_percentage
+
+        if self.height_shoulder_type == "percentage":
+            self.height_shoulder_value = longest_length * self.height_shoulder_percentage
 
         # Check input values
         if self.height_shoulder_value + self.height_value > longest_length:
