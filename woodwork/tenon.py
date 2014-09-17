@@ -140,6 +140,8 @@ class Tenon(bpy.types.Operator):
     shortest_length = -1.0
     longest_length = -1.0
 
+    expand_thickness_properties = bpy.props.BoolProperty(name = "Expand", default = True)
+    expand_height_properties = bpy.props.BoolProperty(name = "Expand", default = True)
 
 
     # Subdivide given edges and return created faces
@@ -196,45 +198,55 @@ class Tenon(bpy.types.Operator):
         thicknessProperties = tenonProperties.thickness_properties
         heightProperties = tenonProperties.height_properties
 
-        layout.label(text = "Width side")
+        row = layout.row(align=True)
+        row.alignment = 'EXPAND'
+        if self.expand_thickness_properties == False: 
+            row.prop(self, "expand_thickness_properties", icon="TRIA_RIGHT", icon_only=True, text="Width side", emboss=False)
+        else:            
+            row.prop(self, "expand_thickness_properties", icon="TRIA_DOWN", icon_only=True, text="Width side", emboss=False)
 
-        widthSideBox = layout.box()
-        widthSideBox.label(text="Thickness type")
-        widthSideBox.prop(thicknessProperties, "type", text = "")
-        if thicknessProperties.type == "value":
-            widthSideBox.prop(thicknessProperties, "value", text = "")
-        elif thicknessProperties.type == "percentage":
-            widthSideBox.prop(thicknessProperties, "percentage", text = "", slider = True)
-        widthSideBox.label(text="Position")
-        widthSideBox.prop(thicknessProperties, "centered")
-        if thicknessProperties.centered == False:
-            widthSideBox.label(text="Thickness shoulder type")
-            widthSideBox.prop(thicknessProperties, "shoulder_type", text = "")
-            if thicknessProperties.shoulder_type == "value":
-                widthSideBox.prop(thicknessProperties, "shoulder_value")
-            elif thicknessProperties.shoulder_type == "percentage":
-                widthSideBox.prop(thicknessProperties, "shoulder_percentage", text = "", slider = True)
-            widthSideBox.prop(thicknessProperties, "reverse_shoulder")
+            widthSideBox = layout.box()
+            widthSideBox.label(text="Thickness type")
+            widthSideBox.prop(thicknessProperties, "type", text = "")
+            if thicknessProperties.type == "value":
+                widthSideBox.prop(thicknessProperties, "value", text = "")
+            elif thicknessProperties.type == "percentage":
+                widthSideBox.prop(thicknessProperties, "percentage", text = "", slider = True)
+            widthSideBox.label(text="Position")
+            widthSideBox.prop(thicknessProperties, "centered")
+            if thicknessProperties.centered == False:
+                widthSideBox.label(text="Thickness shoulder type")
+                widthSideBox.prop(thicknessProperties, "shoulder_type", text = "")
+                if thicknessProperties.shoulder_type == "value":
+                    widthSideBox.prop(thicknessProperties, "shoulder_value")
+                elif thicknessProperties.shoulder_type == "percentage":
+                    widthSideBox.prop(thicknessProperties, "shoulder_percentage", text = "", slider = True)
+                widthSideBox.prop(thicknessProperties, "reverse_shoulder")
 
-        layout.label(text = "Length side")
+        row = layout.row(align=True)
+        row.alignment = 'EXPAND'
+        if self.expand_height_properties == False: 
+            row.prop(self, "expand_height_properties", icon="TRIA_RIGHT", icon_only=True, text="Length side", emboss=False)
+        else:            
+            row.prop(self, "expand_height_properties", icon="TRIA_DOWN", icon_only=True, text="Length side", emboss=False)
 
-        lengthSideBox = layout.box()
-        lengthSideBox.label(text="Height type")
-        lengthSideBox.prop(heightProperties, "type", text = "")
-        if heightProperties.type == "value" :
-            lengthSideBox.prop(heightProperties, "value", text = "")
-        elif heightProperties.type == "percentage":
-            lengthSideBox.prop(heightProperties, "percentage", text = "", slider = True)
-        lengthSideBox.label(text="Position")
-        lengthSideBox.prop(heightProperties, "centered")
-        if heightProperties.centered == False:
-            lengthSideBox.label(text="Height shoulder type")
-            lengthSideBox.prop(heightProperties, "shoulder_type", text = "")
-            if heightProperties.shoulder_type == "value" :
-                lengthSideBox.prop(heightProperties, "shoulder_value")
-            elif heightProperties.shoulder_type == "percentage":
-                lengthSideBox.prop(heightProperties, "shoulder_percentage", text = "", slider = True)
-            lengthSideBox.prop(heightProperties, "reverse_shoulder")
+            lengthSideBox = layout.box()
+            lengthSideBox.label(text="Height type")
+            lengthSideBox.prop(heightProperties, "type", text = "")
+            if heightProperties.type == "value" :
+                lengthSideBox.prop(heightProperties, "value", text = "")
+            elif heightProperties.type == "percentage":
+                lengthSideBox.prop(heightProperties, "percentage", text = "", slider = True)
+            lengthSideBox.label(text="Position")
+            lengthSideBox.prop(heightProperties, "centered")
+            if heightProperties.centered == False:
+                lengthSideBox.label(text="Height shoulder type")
+                lengthSideBox.prop(heightProperties, "shoulder_type", text = "")
+                if heightProperties.shoulder_type == "value" :
+                    lengthSideBox.prop(heightProperties, "shoulder_value")
+                elif heightProperties.shoulder_type == "percentage":
+                    lengthSideBox.prop(heightProperties, "shoulder_percentage", text = "", slider = True)
+                lengthSideBox.prop(heightProperties, "reverse_shoulder")
 
         layout.label(text = "Depth")
         layout.prop(tenonProperties, "depth_value", text = "")
@@ -328,9 +340,11 @@ class Tenon(bpy.types.Operator):
         if thicknessProperties.value == -1.0 or (not nearlyEqual(shortest_length, self.shortest_length)) :
             thicknessProperties.value = shortest_length / 3.0
             thicknessProperties.percentage = 1.0 / 3.0
+            thicknessProperties.centered = True
         if heightProperties.value == -1.0 or (not nearlyEqual(longest_length, self.longest_length)) :
             heightProperties.value = (longest_length * 2.0) / 3.0
             heightProperties.percentage = 2.0 / 3.0
+            heightProperties.centered = True
         if tenonProperties.depth_value == -1.0 or (not nearlyEqual(longest_length, self.longest_length)) :
             tenonProperties.depth_value = shortest_length
 
@@ -363,6 +377,10 @@ class Tenon(bpy.types.Operator):
         if heightProperties.shoulder_value + heightProperties.value > longest_length:
             self.report({'ERROR_INVALID_INPUT'},
                         "Size of length size shoulder and tenon height are too long.")
+            print("shoulder_value", heightProperties.shoulder_value)
+            print("heightProperties.value", heightProperties.value)
+            print("longest_length", longest_length)
+            print("heightProperties.shoulder_value + heightProperties.value", heightProperties.shoulder_value + heightProperties.value)
             return {'CANCELLED'}
 
         if thicknessProperties.shoulder_value + thicknessProperties.value > shortest_length:
@@ -693,4 +711,5 @@ def unregister():
 if __name__ == "__main__":
     register()
     print("Executed")
+
 
