@@ -154,6 +154,7 @@ class Tenon(bpy.types.Operator):
         # see  source / blender / bmesh / operators / bmo_subdivide.c
         #subdivided_faces = [bmesh_type for bmesh_type in ret["geom"] if type(bmesh_type) is bmesh.types.BMFace]
         new_edges = [bmesh_type for bmesh_type in ret["geom_inner"] if type(bmesh_type) is bmesh.types.BMEdge]
+        del ret
         subdivided_faces = set()
         for new_edge in new_edges:
             for linked_face in new_edge.link_faces:
@@ -169,6 +170,7 @@ class Tenon(bpy.types.Operator):
         rot_mat = matrix_world.copy().to_3x3().normalized()
 
         extruded_face = ret['faces'][0]
+        del ret
 
         # apply rotation to the normal
         normal_world = rot_mat * extruded_face.normal
@@ -227,7 +229,7 @@ class Tenon(bpy.types.Operator):
         row.alignment = 'EXPAND'
         if self.expand_height_properties == False: 
             row.prop(self, "expand_height_properties", icon="TRIA_RIGHT", icon_only=True, text="Length side", emboss=False)
-        else:            
+        else:
             row.prop(self, "expand_height_properties", icon="TRIA_DOWN", icon_only=True, text="Length side", emboss=False)
 
             lengthSideBox = layout.box()
@@ -304,6 +306,12 @@ class Tenon(bpy.types.Operator):
             self.report({'ERROR_INVALID_INPUT'},
                         "Selected face is not rectangular.")
             return {'CANCELLED'}
+
+        # Split edges to avoid affecting linked faces when subdividing
+        edges_to_split = [edge for edge in face.edges]
+        ret = bmesh.ops.split_edges(bm, edges=edges_to_split)
+        del ret
+        
         # Get center
         median = face.calc_center_median()
 
@@ -387,7 +395,7 @@ class Tenon(bpy.types.Operator):
             self.report({'ERROR_INVALID_INPUT'},
                         "Size of width size shoulder and tenon thickness are too long.")
             return {'CANCELLED'}
-
+        
         # Subdivide face
         edges_to_subdivide = []
         if heightProperties.type == "max" and heightProperties.centered == True:
