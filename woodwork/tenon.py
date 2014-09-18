@@ -192,6 +192,31 @@ class Tenon(bpy.types.Operator):
 
         bpy.ops.transform.resize(value=resize_value,constraint_axis=constraint_axis_from_tangent(side_tangent), constraint_orientation='LOCAL')
 
+    def __check_face(self, face):
+        # If we don't find a selected face, we have problem.  Exit:
+        if face == None:
+            self.report({'ERROR_INVALID_INPUT'},
+                        "You must select a face for the tenon.")
+            return False
+
+        # Warn the user if face is not 4 vertices.
+        if len(face.verts) > 4 :
+            self.report({'ERROR_INVALID_INPUT'},
+                        "Selected face is not quad.")
+            return False
+
+
+        if not is_face_planar(face) :
+            self.report({'ERROR_INVALID_INPUT'},
+                        "Selected face is planar.")
+            return False
+
+        if not is_face_rectangular(face):
+            self.report({'ERROR_INVALID_INPUT'},
+                        "Selected face is not rectangular.")
+            return False
+        return True
+
     # Custom layout
     def draw(self, context):
         layout = self.layout
@@ -283,28 +308,9 @@ class Tenon(bpy.types.Operator):
         # Get active face
         faces = bm.faces
         face = faces.active
-
-        # If we don't find a selected face, we have problem.  Exit:
-        if face == None:
-            self.report({'ERROR_INVALID_INPUT'},
-                        "You must select a face for the tenon.")
-            return {'CANCELLED'}
-
-        # Warn the user if face is not 4 vertices.
-        if len(face.verts) > 4 :
-            self.report({'ERROR_INVALID_INPUT'},
-                        "Selected face is not quad.")
-            return {'CANCELLED'}
-
-
-        if not is_face_planar(face) :
-            self.report({'ERROR_INVALID_INPUT'},
-                        "Selected face is planar.")
-            return {'CANCELLED'}
-
-        if not is_face_rectangular(face):
-            self.report({'ERROR_INVALID_INPUT'},
-                        "Selected face is not rectangular.")
+        
+        # Check if face could be tenonified ...
+        if self.__check_face(face) == False:
             return {'CANCELLED'}
 
         # Split edges to avoid affecting linked faces when subdividing
@@ -442,12 +448,10 @@ class Tenon(bpy.types.Operator):
             tangent0 = e0.calc_tangent(l0)
 
             if same_direction(tangent0, shortest_side_tangent) :
-                v0 = matrix_world * e0.verts[0].co
-                v1 = matrix_world * e0.verts[1].co
+                thickness_reference_edge = e0
             else :
-                v0 = matrix_world * e1.verts[0].co
-                v1 = matrix_world * e1.verts[1].co
-            tenonThicknessToResize = (v0 - v1).length
+                thickness_reference_edge = e1
+
         elif thicknessProperties.type == "max" and thicknessProperties.centered == True:
             # get tenon side facing the longest side
             l0 = tenon.loops[0]
@@ -458,12 +462,10 @@ class Tenon(bpy.types.Operator):
             tangent0 = e0.calc_tangent(l0)
 
             if same_direction(tangent0, longest_side_tangent) :
-                v0 = matrix_world * e0.verts[0].co
-                v1 = matrix_world * e0.verts[1].co
+                height_reference_edge = e0
             else :
-                v0 = matrix_world * e1.verts[0].co
-                v1 = matrix_world * e1.verts[1].co
-            tenonHeightToResize = (v0 - v1).length
+                height_reference_edge = e1
+
         else :
             # Find faces to resize to obtain tenon base
             tenonEdges = tenon.edges
@@ -483,7 +485,6 @@ class Tenon(bpy.types.Operator):
 
                                     if height_reference_edge == None:
                                         height_reference_edge = tenonEdge
-
                                 else :
                                     thicknessFaces.append(connectedFace)
 
