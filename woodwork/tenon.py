@@ -377,21 +377,25 @@ class Tenon(bpy.types.Operator):
         # If shoulder percentage specified, compute length values
         if thicknessProperties.shoulder_type == "percentage":
             thicknessProperties.shoulder_value = shortest_length * thicknessProperties.shoulder_percentage
+            if thicknessProperties.shoulder_value + thicknessProperties.value > shortest_length:
+                thicknessProperties.value = shortest_length - thicknessProperties.shoulder_value
+                thicknessProperties.percentage = thicknessProperties.value / shortest_length
 
         if heightProperties.shoulder_type == "percentage":
             heightProperties.shoulder_value = longest_length * heightProperties.shoulder_percentage
+            if heightProperties.shoulder_value + heightProperties.value > longest_length:
+                heightProperties.value = longest_length - heightProperties.shoulder_value
+                heightProperties.percentage = heightProperties.value / longest_length
 
         # Check input values
-        if heightProperties.shoulder_value + heightProperties.value > longest_length:
+        total_length = heightProperties.shoulder_value + heightProperties.value
+        if (not nearlyEqual(total_length, longest_length)) and (total_length > longest_length):
             self.report({'ERROR_INVALID_INPUT'},
                         "Size of length size shoulder and tenon height are too long.")
-            print("shoulder_value", heightProperties.shoulder_value)
-            print("heightProperties.value", heightProperties.value)
-            print("longest_length", longest_length)
-            print("heightProperties.shoulder_value + heightProperties.value", heightProperties.shoulder_value + heightProperties.value)
             return {'CANCELLED'}
 
-        if thicknessProperties.shoulder_value + thicknessProperties.value > shortest_length:
+        total_length = thicknessProperties.shoulder_value + thicknessProperties.value
+        if  (not nearlyEqual(total_length, shortest_length)) and (total_length > shortest_length):
             self.report({'ERROR_INVALID_INPUT'},
                         "Size of width size shoulder and tenon thickness are too long.")
             return {'CANCELLED'}
