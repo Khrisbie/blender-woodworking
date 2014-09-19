@@ -141,6 +141,39 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
                     description = "Specify shoulder for the other side",
                     default = False)
 
+    haunched = bpy.props.BoolProperty(
+                    name = "Haunched",
+                    description = "Add a little stub tenon at the top of the joint",
+                    default = False)
+
+    haunch_type = bpy.props.EnumProperty(
+        items=[('value', 
+                "Value", 
+                "Give value to haunch depth"),
+               ('percentage', 
+                "Percentage", 
+                "Set haunch depth by percentage")],
+        name="Haunch value type", 
+        default='value')
+
+    haunch_depth_value = bpy.props.FloatProperty(
+                        name = "Haunch depth",
+                        description = "Haunch depth",
+                        min = 0.0,
+                        default = -1.0,
+                        subtype = 'DISTANCE',
+                        unit = 'LENGTH',
+                        precision = 3,
+                        step = 0.1)
+
+    haunch_depth_percentage = bpy.props.FloatProperty(
+                    name = "Haunch depth",
+                    description = "Haunch depth (relative to tenon depth)",
+                    min = 0.0,
+                    max = 1.0,
+                    subtype = 'PERCENTAGE',
+                    unit = 'LENGTH')
+
 class TenonPropertyGroup(bpy.types.PropertyGroup):
 
     thickness_properties = bpy.props.PointerProperty(type = TenonThicknessPropertyGroup)
