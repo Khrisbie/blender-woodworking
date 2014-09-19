@@ -208,7 +208,7 @@ class Tenon(bpy.types.Operator):
 
         if not is_face_planar(face) :
             self.report({'ERROR_INVALID_INPUT'},
-                        "Selected face is planar.")
+                        "Selected face is not planar.")
             return False
 
         if not is_face_rectangular(face):

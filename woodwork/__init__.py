@@ -10,7 +10,6 @@ bl_info = {
     "wiki_url": "https://github.com/Khrisbie/blender-woodworking",
     "category": "Mesh"}
 
-    
 # import files in package
 if "bpy" in locals():
     print("Reloading WoodWorking v %d.%d" % bl_info["version"])
@@ -18,23 +17,27 @@ if "bpy" in locals():
     imp.reload(tenon_properties)
     imp.reload(tenon)
     imp.reload(main_panel)
+    imp.reload(translations)
 
 else:
     print("Loading WoodWorking v %d.%d" % bl_info["version"])
     from . import tenon_properties
     from . import tenon
     from . import main_panel
+    from . import translations
 
 # registration
 def register():
     tenon_properties.register()
     tenon.register()
     main_panel.register()
-  
+    translations.register(__name__)
+
 def unregister():
     tenon_properties.unregister()
     tenon.unregister()
     main_panel.unregister()
+    translations.unregister(__name__)
 
 if __name__ == '__main__':
     register()
