@@ -163,6 +163,8 @@ def register():
     bpy.types.Scene.tenonProperties = bpy.props.PointerProperty(type = TenonPropertyGroup)
 
 def unregister():
+    bpy.utils.unregister_class(TenonThicknessPropertyGroup)
+    bpy.utils.unregister_class(TenonHeightPropertyGroup)
     bpy.utils.unregister_class(TenonPropertyGroup)
 
 
