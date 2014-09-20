@@ -30,8 +30,7 @@ class TenonThicknessPropertyGroup(bpy.types.PropertyGroup):
                     description = "Tenon thickness (relative to width side)",
                     min = 0.0,
                     max = 1.0,
-                    subtype = 'PERCENTAGE',
-                    unit = 'LENGTH')
+                    subtype = 'PERCENTAGE')
 
     centered = bpy.props.BoolProperty(
                     name = "Centered",
@@ -63,8 +62,7 @@ class TenonThicknessPropertyGroup(bpy.types.PropertyGroup):
                     description = "Tenon shoulder (relative to width side)",
                     min = 0.0,
                     max = 1.0,
-                    subtype = 'PERCENTAGE',
-                    unit = 'LENGTH')
+                    subtype = 'PERCENTAGE')
 
     reverse_shoulder = bpy.props.BoolProperty(
                     name = "Reverse shoulder",
@@ -100,8 +98,7 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
                     description = "Tenon height relative to length side",
                     min = 0.0,
                     max = 1.0,
-                    subtype = 'PERCENTAGE',
-                    unit = 'LENGTH')
+                    subtype = 'PERCENTAGE')
 
     centered = bpy.props.BoolProperty(
                     name = "Centered",
@@ -133,8 +130,7 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
                     description = "Tenon shoulder (relative to length side)",
                     min = 0.0,
                     max = 1.0,
-                    subtype = 'PERCENTAGE',
-                    unit = 'LENGTH')
+                    subtype = 'PERCENTAGE')
 
     reverse_shoulder = bpy.props.BoolProperty(
                     name = "Reverse shoulder",
@@ -171,8 +167,7 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
                     description = "Haunch depth (relative to tenon depth)",
                     min = 0.0,
                     max = 1.0,
-                    subtype = 'PERCENTAGE',
-                    unit = 'LENGTH')
+                    subtype = 'PERCENTAGE')
 
 class TenonPropertyGroup(bpy.types.PropertyGroup):
 
