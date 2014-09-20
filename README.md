@@ -50,7 +50,7 @@ The tenon panel is organized in three parts :
 
 2. Length side
 
-![Detail for length side](/screenshots/tenon_panel_height_details.blend.png)
+  ![Detail for length side](/screenshots/tenon_panel_height_details.blend.png)
 
   On this box, you set tenon **height** and position along _length axis_.
 
