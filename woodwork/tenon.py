@@ -4,66 +4,6 @@ from math import pi
 from mathutils.geometry import (distance_point_to_plane, intersect_point_line)
 from sys import float_info
 
-# See if the current item should be selected or not
-def selectCheck(isSelected, hasSelected, extend):
-
-        # If we are extending or nothing is selected we want to select
-        if extend or not hasSelected:
-                return True
-
-        return False
-
-
-
-# See if the current item should be deselected or not
-def deselectCheck(isSelected, hasSelected, extend):
-
-        # If something is selected and we're not extending we want to deselect
-        if hasSelected and not extend:
-                return True
-
-        return False
-
-# See if there is at least one selected item in 'items'
-def contains_selected_item(items):
-
-        for item in items:
-                if item.select:
-                        return True
-
-        return False
-
-# Select by direction
-def by_direction(direction, divergence, extend=False):
-
-        mesh = bpy.context.active_object.data
-        direction = mathutils.Vector(direction)
-
-        hasSelected = contains_selected_item(mesh.faces)
-
-        # Make sure there's an actual directions
-        if direction.length:
-
-                # Loop through all the given faces
-                for f in mesh.faces:
-
-                        isSelected = f.select
-                        s = selectCheck(isSelected, hasSelected, extend)
-                        d = deselectCheck(isSelected, hasSelected, extend)
-
-                        angle = direction.angle(f.normal)
-
-                        if s and angle <= divergence:
-                                f.select = True
-                        elif d and angle > divergence:
-                                f.select = False
-
-
-# Get a list of all selected faces
-def get_selected_faces(bm):
-
-        return [f for f in bm.faces if f.select]
-
 # is_face_planar
 #
 # Tests a face to see if it is planar.
@@ -108,11 +48,6 @@ def nearlyEqual(a, b, epsilon = 0.00001):
     else :
         return diff / (absA + absB) < epsilon
 
-
-def zero_element_under_tol(vector, tol = 1e-6):
-     for elem in vector:
-        if abs(elem) < tol:
-            elem = 0
 
 def same_direction(tangent0, tangent1) :
     angle = tangent0.angle(tangent1)
@@ -166,13 +101,11 @@ class Tenon(bpy.types.Operator):
 
         ret = bmesh.ops.extrude_discrete_faces(bm, faces=[face])
 
-        # get only rotation from matrix_world (no scale or translation)
-        rot_mat = matrix_world.copy().to_3x3().normalized()
-
         extruded_face = ret['faces'][0]
         del ret
 
         # apply rotation to the normal
+        rot_mat = matrix_world.copy().to_3x3().normalized()
         normal_world = rot_mat * extruded_face.normal
         normal_world = normal_world * depth
 
@@ -180,6 +113,47 @@ class Tenon(bpy.types.Operator):
 
         bpy.ops.mesh.select_all(action="DESELECT")
         extruded_face.select = True
+
+    # Extrude and translate an edge of the face to set it sloped
+    def __set_face_sloped(self,
+                          depth,
+                          bm,
+                          matrix_world,
+                          face, 
+                          still_edge_tangent):
+
+        # Extrude face
+        ret = bmesh.ops.extrude_discrete_faces(bm, faces = [face])
+
+        extruded_face = ret['faces'][0]
+        del ret
+
+        # apply rotation to the normal
+        rot_mat = matrix_world.copy().to_3x3().normalized()
+        normal_world = rot_mat * extruded_face.normal
+        normal_world = normal_world * depth
+
+        # Find vertices to be translated
+        verts_to_translate = []
+
+        for edge in extruded_face.edges:
+            for loop in edge.link_loops:
+                if loop.face == extruded_face:
+                    tangent = edge.calc_tangent(loop)
+                    angle = tangent.angle(still_edge_tangent)
+                    if nearlyEqual(angle, pi):
+                        for vert in edge.verts:
+                            verts_to_translate.append(vert)
+                        break
+                if len(verts_to_translate) > 0:
+                  break
+            if len(verts_to_translate) > 0:
+              break
+        
+        bmesh.ops.translate(bm,
+                            vec = normal_world,
+                            space = matrix_world,
+                            verts = verts_to_translate)
 
     def __resize_faces(self, faces, side_tangent, scale_factor):
 
@@ -276,12 +250,14 @@ class Tenon(bpy.types.Operator):
                 lengthSideBox.prop(heightProperties, "reverse_shoulder")
                 lengthSideBox.prop(heightProperties, "haunched")
                 if heightProperties.haunched == True:
-                    lengthSideBox.label(text="Haunch depth type")
+                    lengthSideBox.label(text = "Haunch depth type")
                     lengthSideBox.prop(heightProperties, "haunch_type", text = "")
                     if heightProperties.haunch_type == "value" :
                         lengthSideBox.prop(heightProperties, "haunch_depth_value", text="")
                     elif heightProperties.haunch_type == "percentage":
                         lengthSideBox.prop(heightProperties, "haunch_depth_percentage", text = "", slider = True)
+                    lengthSideBox.label(text = "Haunch angle")
+                    lengthSideBox.prop(heightProperties, "haunch_angle", text = "")
 
         layout.label(text = "Depth")
         layout.prop(tenonProperties, "depth_value", text = "")
@@ -316,7 +292,7 @@ class Tenon(bpy.types.Operator):
         # Get active face
         faces = bm.faces
         face = faces.active
-        
+
         # Check if face could be tenonified ...
         if self.__check_face(face) == False:
             return {'CANCELLED'}
@@ -325,7 +301,7 @@ class Tenon(bpy.types.Operator):
         edges_to_split = [edge for edge in face.edges]
         ret = bmesh.ops.split_edges(bm, edges=edges_to_split)
         del ret
-        
+
         # Get center
         median = face.calc_center_median()
 
@@ -708,10 +684,26 @@ class Tenon(bpy.types.Operator):
 
         # Haunched tenon
         if heightProperties.centered == False and heightProperties.haunched == True:
-            self.__set_face_depth(heightProperties.haunch_depth_value, bm, matrix_world, height_shoulder)
+            if heightProperties.haunch_angle == "sloped":
+                still_edge_tangent = shortest_side_tangent
+                if heightProperties.reverse_shoulder == True:
+                    still_edge_tangent.negate()
+                self.__set_face_sloped(heightProperties.haunch_depth_value,
+                                       bm,
+                                       matrix_world,
+                                       height_shoulder,
+                                       still_edge_tangent)
+            else:
+                self.__set_face_depth(heightProperties.haunch_depth_value,
+                                      bm,
+                                      matrix_world,
+                                      height_shoulder)
 
         # Set tenon depth
-        self.__set_face_depth(tenonProperties.depth_value, bm, matrix_world, tenon)
+        self.__set_face_depth(tenonProperties.depth_value,
+                              bm,
+                              matrix_world,
+                              tenon)
 
         # Flush selection
         bm.select_flush_mode()
@@ -740,6 +732,4 @@ def unregister():
 #----------------------------------------------
 if __name__ == "__main__":
     register()
-    print("Executed")
-
 

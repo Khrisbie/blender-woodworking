@@ -169,6 +169,16 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
                     max = 1.0,
                     subtype = 'PERCENTAGE')
 
+    haunch_angle = bpy.props.EnumProperty(
+        items=[('straight',
+                "Straight",
+                "Use a straight haunch"),
+               ('sloped',
+                "Sloped",
+                "Use a sloping haunch")],
+        name="Haunch angle",
+        default='straight')
+
 class TenonPropertyGroup(bpy.types.PropertyGroup):
 
     thickness_properties = bpy.props.PointerProperty(type = TenonThicknessPropertyGroup)
@@ -201,4 +211,3 @@ def unregister():
 #----------------------------------------------
 if __name__ == "__main__":
     register()
-    print("Executed")
