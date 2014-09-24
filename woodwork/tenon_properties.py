@@ -1,173 +1,175 @@
 import bpy
 from bpy.props import *
 
+
 class TenonThicknessPropertyGroup(bpy.types.PropertyGroup):
     type = bpy.props.EnumProperty(
         items=[('max',
-                "Max. thickness", 
+                "Max. thickness",
                 "Set thickness to the maximum width"),
-               ('value', 
-                "Value", 
+               ('value',
+                "Value",
                 "Give value to thickness"),
-               ('percentage', 
-                "Percentage", 
+               ('percentage',
+                "Percentage",
                 "Set thickness by percentage")],
-        name="Thickness type", 
+        name="Thickness type",
         default='value')
 
     value = bpy.props.FloatProperty(
-                    name = "Thickness",
-                    description = "Tenon thickness (relative to width side)",
-                    min = 0.0,
-                    default = -1.0,
-                    subtype = 'DISTANCE',
-                    unit = 'LENGTH',
-                    precision = 3,
-                    step = 0.1)
+        name="Thickness",
+        description="Tenon thickness (relative to width side)",
+        min=0.0,
+        default=-1.0,
+        subtype='DISTANCE',
+        unit='LENGTH',
+        precision=3,
+        step=0.1)
 
     percentage = bpy.props.FloatProperty(
-                    name = "Thickness",
-                    description = "Tenon thickness (relative to width side)",
-                    min = 0.0,
-                    max = 1.0,
-                    subtype = 'PERCENTAGE')
+        name="Thickness",
+        description="Tenon thickness (relative to width side)",
+        min=0.0,
+        max=1.0,
+        subtype='PERCENTAGE')
 
     centered = bpy.props.BoolProperty(
-                    name = "Centered",
-                    description = "Specify if tenon is centered on width side",
-                    default = True)
+        name="Centered",
+        description="Specify if tenon is centered on width side",
+        default=True)
 
     shoulder_type = bpy.props.EnumProperty(
-        items=[('value', 
-                "Value", 
+        items=[('value',
+                "Value",
                 "Give value to shoulder thickness"),
-               ('percentage', 
-                "Percentage", 
+               ('percentage',
+                "Percentage",
                 "Set thickness shoulder by percentage")],
-        name="Thickness shoulder type", 
+        name="Thickness shoulder type",
         default='value')
 
     shoulder_value = bpy.props.FloatProperty(
-                    name = "Shoulder",
-                    description = "Tenon shoulder on width side",
-                    min = 0.0,
-                    default = -1.0,
-                    subtype = 'DISTANCE',
-                    unit = 'LENGTH',
-                    precision = 3,
-                    step = 0.1)
+        name="Shoulder",
+        description="Tenon shoulder on width side",
+        min=0.0,
+        default=-1.0,
+        subtype='DISTANCE',
+        unit='LENGTH',
+        precision=3,
+        step=0.1)
 
     shoulder_percentage = bpy.props.FloatProperty(
-                    name = "Shoulder",
-                    description = "Tenon shoulder (relative to width side)",
-                    min = 0.0,
-                    max = 1.0,
-                    subtype = 'PERCENTAGE')
+        name="Shoulder",
+        description="Tenon shoulder (relative to width side)",
+        min=0.0,
+        max=1.0,
+        subtype='PERCENTAGE')
 
     reverse_shoulder = bpy.props.BoolProperty(
-                    name = "Reverse shoulder",
-                    description = "Specify shoulder for the other side",
-                    default = False)
+        name="Reverse shoulder",
+        description="Specify shoulder for the other side",
+        default=False)
+
 
 class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
     type = bpy.props.EnumProperty(
-        items=[('max', 
-                "Max. height", 
+        items=[('max',
+                "Max. height",
                 "Set height to the maximum length"),
-               ('value', 
-                "Value", 
+               ('value',
+                "Value",
                 "Give value to height"),
-               ('percentage', 
-                "Percentage", 
+               ('percentage',
+                "Percentage",
                 "Set height by percentage")],
-        name="Height type", 
+        name="Height type",
         default='value')
 
     value = bpy.props.FloatProperty(
-                        name = "Height",
-                        description = "Tenon height relative to length side",
-                        min = 0.0,
-                        default = -1.0,
-                        subtype = 'DISTANCE',
-                        unit ='LENGTH',
-                        precision = 3,
-                        step = 0.1)
+        name="Height",
+        description="Tenon height relative to length side",
+        min=0.0,
+        default=-1.0,
+        subtype='DISTANCE',
+        unit='LENGTH',
+        precision=3,
+        step=0.1)
 
     percentage = bpy.props.FloatProperty(
-                    name = "Height",
-                    description = "Tenon height relative to length side",
-                    min = 0.0,
-                    max = 1.0,
-                    subtype = 'PERCENTAGE')
+        name="Height",
+        description="Tenon height relative to length side",
+        min=0.0,
+        max=1.0,
+        subtype='PERCENTAGE')
 
     centered = bpy.props.BoolProperty(
-                    name = "Centered",
-                    description = "Specify if tenon is centered on length side",
-                    default = True)
+        name="Centered",
+        description="Specify if tenon is centered on length side",
+        default=True)
 
     shoulder_type = bpy.props.EnumProperty(
-        items=[('value', 
-                "Value", 
+        items=[('value',
+                "Value",
                 "Give value to shoulder height"),
-               ('percentage', 
-                "Percentage", 
+               ('percentage',
+                "Percentage",
                 "Set shoulder height by percentage")],
-        name="Height shoulder type", 
+        name="Height shoulder type",
         default='value')
 
     shoulder_value = bpy.props.FloatProperty(
-                    name = "Shoulder",
-                    description = "Tenon shoulder on length side",
-                    min = 0.0,
-                    default = -1.0,
-                    subtype = 'DISTANCE',
-                    unit = 'LENGTH',
-                    precision = 3,
-                    step = 0.1)
+        name="Shoulder",
+        description="Tenon shoulder on length side",
+        min=0.0,
+        default=-1.0,
+        subtype='DISTANCE',
+        unit='LENGTH',
+        precision=3,
+        step=0.1)
 
     shoulder_percentage = bpy.props.FloatProperty(
-                    name = "Shoulder",
-                    description = "Tenon shoulder (relative to length side)",
-                    min = 0.0,
-                    max = 1.0,
-                    subtype = 'PERCENTAGE')
+        name="Shoulder",
+        description="Tenon shoulder (relative to length side)",
+        min=0.0,
+        max=1.0,
+        subtype='PERCENTAGE')
 
     reverse_shoulder = bpy.props.BoolProperty(
-                    name = "Reverse shoulder",
-                    description = "Specify shoulder for the other side",
-                    default = False)
+        name="Reverse shoulder",
+        description="Specify shoulder for the other side",
+        default=False)
 
     haunched = bpy.props.BoolProperty(
-                    name = "Haunched",
-                    description = "Add a little stub tenon at the top of the joint",
-                    default = False)
+        name="Haunched",
+        description="Add a little stub tenon at the top of the joint",
+        default=False)
 
     haunch_type = bpy.props.EnumProperty(
-        items=[('value', 
-                "Value", 
+        items=[('value',
+                "Value",
                 "Give value to haunch depth"),
-               ('percentage', 
-                "Percentage", 
+               ('percentage',
+                "Percentage",
                 "Set haunch depth by percentage")],
-        name="Haunch value type", 
+        name="Haunch value type",
         default='value')
 
     haunch_depth_value = bpy.props.FloatProperty(
-                        name = "Haunch depth",
-                        description = "Haunch depth",
-                        min = 0.0,
-                        default = -1.0,
-                        subtype = 'DISTANCE',
-                        unit = 'LENGTH',
-                        precision = 3,
-                        step = 0.1)
+        name="Haunch depth",
+        description="Haunch depth",
+        min=0.0,
+        default=-1.0,
+        subtype='DISTANCE',
+        unit='LENGTH',
+        precision=3,
+        step=0.1)
 
     haunch_depth_percentage = bpy.props.FloatProperty(
-                    name = "Haunch depth",
-                    description = "Haunch depth (relative to tenon depth)",
-                    min = 0.0,
-                    max = 1.0,
-                    subtype = 'PERCENTAGE')
+        name="Haunch depth",
+        description="Haunch depth (relative to tenon depth)",
+        min=0.0,
+        max=1.0,
+        subtype='PERCENTAGE')
 
     haunch_angle = bpy.props.EnumProperty(
         items=[('straight',
@@ -179,26 +181,30 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
         name="Haunch angle",
         default='straight')
 
-class TenonPropertyGroup(bpy.types.PropertyGroup):
 
-    thickness_properties = bpy.props.PointerProperty(type = TenonThicknessPropertyGroup)
-    height_properties = bpy.props.PointerProperty(type = TenonHeightPropertyGroup)
+class TenonPropertyGroup(bpy.types.PropertyGroup):
+    thickness_properties = bpy.props.PointerProperty(
+        type=TenonThicknessPropertyGroup)
+    height_properties = bpy.props.PointerProperty(type=TenonHeightPropertyGroup)
 
     depth_value = bpy.props.FloatProperty(
-                        name = "Depth",
-                        description = "Tenon depth",
-                        min = 0.0,
-                        default = -1.0,
-                        subtype = 'DISTANCE',
-                        unit = 'LENGTH',
-                        precision = 3,
-                        step = 0.1)
+        name="Depth",
+        description="Tenon depth",
+        min=0.0,
+        default=-1.0,
+        subtype='DISTANCE',
+        unit='LENGTH',
+        precision=3,
+        step=0.1)
+
 
 def register():
     bpy.utils.register_class(TenonThicknessPropertyGroup)
     bpy.utils.register_class(TenonHeightPropertyGroup)
     bpy.utils.register_class(TenonPropertyGroup)
-    bpy.types.Scene.tenonProperties = bpy.props.PointerProperty(type = TenonPropertyGroup)
+    bpy.types.Scene.tenonProperties = bpy.props.PointerProperty(
+        type=TenonPropertyGroup)
+
 
 def unregister():
     bpy.utils.unregister_class(TenonThicknessPropertyGroup)
@@ -206,7 +212,7 @@ def unregister():
     bpy.utils.unregister_class(TenonPropertyGroup)
 
 
-#----------------------------------------------
+# ----------------------------------------------
 # Code to run the script alone
 #----------------------------------------------
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ bl_info = {
     "version": (1, 0),
     "blender": (2, 71, 0),
     "location": "View3D > Tool Shelf > Woodworking",
-    "warning": "", # used for warning icon and text in addons panel
+    "warning": "",
     "wiki_url": "https://github.com/Khrisbie/blender-woodworking",
     "category": "Mesh"}
 
@@ -26,12 +26,14 @@ else:
     from . import joints_panel
     from . import translations
 
+
 # registration
 def register():
     tenon_properties.register()
     tenon.register()
     joints_panel.register()
     translations.register(__name__)
+
 
 def unregister():
     tenon_properties.unregister()

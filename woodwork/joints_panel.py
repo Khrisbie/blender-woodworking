@@ -1,6 +1,7 @@
 import bpy
 
-class JointsPanel(bpy.types.Panel) :
+
+class JointsPanel(bpy.types.Panel):
 
     bl_label = "Woodworking joints"
     bl_idname = "woodworking_joints_panel"
@@ -8,7 +9,7 @@ class JointsPanel(bpy.types.Panel) :
     bl_region_type = 'TOOLS'
     bl_category = 'Woodworking'
 
-    def draw(self, context) :
+    def draw(self, context):
         layout = self.layout
 
         box = layout.box()
@@ -25,6 +26,3 @@ def unregister():
 
 if __name__ == "__main__":
     register()
- 
-
-
