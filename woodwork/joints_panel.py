@@ -15,6 +15,7 @@ class JointsPanel(bpy.types.Panel):
         box = layout.box()
         row = box.row()
         row.operator("mesh.tenon")
+        row.operator("mesh.mortise")
 
 
 def register():

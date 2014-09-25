@@ -1,35 +1,12 @@
 import bpy
 import bmesh
-from mathutils import Vector, Matrix
-from mathutils.geometry import distance_point_to_plane
-from math import pi
-from tenon_mortise_builder import TenonMortiseBuilder, FaceToBeTransformed, nearly_equal
+from tenon_mortise_builder import TenonMortiseBuilder, TenonMortiseBuilderProps, FaceToBeTransformed, nearly_equal
+from tenon import is_face_planar, is_face_rectangular
 
-# is_face_planar
-#
-# Tests a face to see if it is planar.
-def is_face_planar(face, error=0.0005):
-    for v in face.verts:
-        d = distance_point_to_plane(v.co, face.verts[0].co, face.normal)
-        if bpy.app.debug:
-            print("Distance: " + str(d))
-        if d < -error or d > error:
-            return False
-    return True
-
-
-def is_face_rectangular(face, error=0.0005):
-    for loop in face.loops:
-        perp_angle = loop.calc_angle() - (pi / 2)
-        if perp_angle < -error or perp_angle > error:
-            return False
-    return True
-
-
-class TenonOperator(bpy.types.Operator):
-    bl_description = "Creates a tenon given a face"
-    bl_idname = "mesh.tenon"
-    bl_label = "Tenon"
+class MortiseOperator(bpy.types.Operator):
+    bl_description = "Creates a mortise given a face"
+    bl_idname = "mesh.mortise"
+    bl_label = "Mortise"
     bl_options = {'REGISTER', 'UNDO'}
 
     #
@@ -48,7 +25,7 @@ class TenonOperator(bpy.types.Operator):
         # If we don't find a selected face, we have problem.  Exit:
         if face is None:
             self.report({'ERROR_INVALID_INPUT'},
-                        "You must select a face for the tenon.")
+                        "You must select a face for the mortise.")
             return False
 
         # Warn the user if face is not 4 vertices.
@@ -72,9 +49,9 @@ class TenonOperator(bpy.types.Operator):
     def draw(self, context):
         layout = self.layout
 
-        tenon_properties = context.scene.tenonProperties
-        thickness_properties = tenon_properties.thickness_properties
-        height_properties = tenon_properties.height_properties
+        mortise_properties = context.scene.mortiseProperties
+        thickness_properties = mortise_properties.thickness_properties
+        height_properties = mortise_properties.height_properties
 
         row = layout.row(align=True)
         row.alignment = 'EXPAND'
@@ -160,7 +137,7 @@ class TenonOperator(bpy.types.Operator):
                                          text="")
 
         layout.label(text="Depth")
-        layout.prop(tenon_properties, "depth_value", text="")
+        layout.prop(mortise_properties, "depth_value", text="")
 
     # used to check if the operator can run
     @classmethod
@@ -168,11 +145,46 @@ class TenonOperator(bpy.types.Operator):
         ob = context.active_object
         return ob and ob.type == 'MESH' and context.mode == 'EDIT_MESH'
 
+    def __mortise_properties_to_builder_properties(self, mortise_properties):
+        builder_properties = TenonMortiseBuilderProps()
+        builder_properties.depth_value = -mortise_properties.depth_value
+
+        builder_thickness_properties = builder_properties.thickness_properties
+        mortise_thickness_properties = mortise_properties.thickness_properties
+
+        builder_thickness_properties.type = mortise_thickness_properties.type
+        builder_thickness_properties.value = mortise_thickness_properties.value
+        builder_thickness_properties.percentage = mortise_thickness_properties.percentage
+        builder_thickness_properties.centered = mortise_thickness_properties.centered
+        builder_thickness_properties.shoulder_type = mortise_thickness_properties.shoulder_type
+        builder_thickness_properties.shoulder_value = mortise_thickness_properties.shoulder_value
+        builder_thickness_properties.shoulder_percentage = mortise_thickness_properties.shoulder_percentage
+        builder_thickness_properties.reverse_shoulder = mortise_thickness_properties.reverse_shoulder
+
+        builder_height_properties = builder_properties.height_properties
+        mortise_height_properties = mortise_properties.height_properties
+
+        builder_height_properties.type = mortise_height_properties.type
+        builder_height_properties.value = mortise_height_properties.value
+        builder_height_properties.percentage = mortise_height_properties.percentage
+        builder_height_properties.centered = mortise_height_properties.centered
+        builder_height_properties.shoulder_type = mortise_height_properties.shoulder_type
+        builder_height_properties.shoulder_value = mortise_height_properties.shoulder_value
+        builder_height_properties.shoulder_percentage = mortise_height_properties.shoulder_percentage
+        builder_height_properties.reverse_shoulder =  mortise_height_properties.reverse_shoulder
+        builder_height_properties.haunched =  mortise_height_properties.haunched
+        builder_height_properties.haunch_type = mortise_height_properties.haunch_type
+        builder_height_properties.haunch_depth_value =  -mortise_height_properties.haunch_depth_value
+        builder_height_properties.haunch_depth_percentage =  mortise_height_properties.haunch_depth_percentage
+        builder_height_properties.haunch_angle =  mortise_height_properties.haunch_angle
+
+        return builder_properties
+
     def execute(self, context):
 
-        tenon_properties = context.scene.tenonProperties
-        thickness_properties = tenon_properties.thickness_properties
-        height_properties = tenon_properties.height_properties
+        mortise_properties = context.scene.mortiseProperties
+        thickness_properties = mortise_properties.thickness_properties
+        height_properties = mortise_properties.height_properties
 
         obj = context.object
         matrix_world = obj.matrix_world
@@ -191,7 +203,7 @@ class TenonOperator(bpy.types.Operator):
         faces = bm.faces
         face = faces.active
 
-        # Check if face could be tenonified ...
+        # Check if face could be transformed to mortise ...
         if not self.__check_face(face):
             return {'CANCELLED'}
 
@@ -219,13 +231,13 @@ class TenonOperator(bpy.types.Operator):
                                        2.0) / 3.0
             height_properties.percentage = 2.0 / 3.0
             height_properties.centered = True
-        if (tenon_properties.depth_value == -1.0 or
+        if (mortise_properties.depth_value == -1.0 or
                 (not nearly_equal(face_to_be_transformed.longest_length,
                                   self.longest_length))):
-            tenon_properties.depth_value = \
+            mortise_properties.depth_value = \
                 face_to_be_transformed.shortest_length
             height_properties.haunch_depth_value = \
-                tenon_properties.depth_value / 3.0
+                mortise_properties.depth_value / 3.0
             height_properties.haunch_depth_percentage = 1.0 / 3.0
 
         # used to reinit default values when face changes
@@ -288,7 +300,7 @@ class TenonOperator(bpy.types.Operator):
 
         if height_properties.haunch_type == "percentage":
             height_properties.haunch_depth_value = \
-                tenon_properties.depth_value * \
+                mortise_properties.depth_value * \
                 height_properties.haunch_depth_percentage
 
         # Check input values
@@ -298,7 +310,7 @@ class TenonOperator(bpy.types.Operator):
                               face_to_be_transformed.longest_length)) and
                 (total_length > face_to_be_transformed.longest_length)):
             self.report({'ERROR_INVALID_INPUT'},
-                        "Size of length size shoulder and tenon height are "
+                        "Size of length size shoulder and mortise height are "
                         "too long.")
             return {'CANCELLED'}
 
@@ -308,13 +320,14 @@ class TenonOperator(bpy.types.Operator):
                               face_to_be_transformed.shortest_length)) and
                 (total_length > face_to_be_transformed.shortest_length)):
             self.report({'ERROR_INVALID_INPUT'},
-                        "Size of width size shoulder and tenon thickness are "
+                        "Size of width size shoulder and mortise thickness are "
                         "too long.")
             return {'CANCELLED'}
 
-        # Create tenon
-        tenon_builder = TenonMortiseBuilder(face_to_be_transformed)
-        tenon_builder.create(bm, matrix_world, tenon_properties)
+        # Create mortise
+        mortise_builder = TenonMortiseBuilder(face_to_be_transformed)
+        builder_properties = self.__mortise_properties_to_builder_properties(mortise_properties)
+        mortise_builder.create(bm, matrix_world, builder_properties)
 
         # Flush selection
         bm.select_flush_mode()
@@ -329,11 +342,11 @@ class TenonOperator(bpy.types.Operator):
 
 
 def register():
-    bpy.utils.register_class(TenonOperator)
+    bpy.utils.register_class(MortiseOperator)
 
 
 def unregister():
-    bpy.utils.unregister_class(TenonOperator)
+    bpy.utils.unregister_class(MortiseOperator)
 
 
 # ----------------------------------------------
@@ -341,4 +354,3 @@ def unregister():
 # ----------------------------------------------
 if __name__ == "__main__":
     register()
-

@@ -2,7 +2,7 @@ import bpy
 from bpy.props import *
 
 
-class TenonThicknessPropertyGroup(bpy.types.PropertyGroup):
+class MortiseThicknessPropertyGroup(bpy.types.PropertyGroup):
     type = bpy.props.EnumProperty(
         items=[('max',
                 "Max. thickness",
@@ -18,7 +18,7 @@ class TenonThicknessPropertyGroup(bpy.types.PropertyGroup):
 
     value = bpy.props.FloatProperty(
         name="Thickness",
-        description="Tenon thickness (relative to width side)",
+        description="Mortise thickness (relative to width side)",
         min=0.0,
         default=-1.0,
         subtype='DISTANCE',
@@ -28,14 +28,14 @@ class TenonThicknessPropertyGroup(bpy.types.PropertyGroup):
 
     percentage = bpy.props.FloatProperty(
         name="Thickness",
-        description="Tenon thickness (relative to width side)",
+        description="Mortise thickness (relative to width side)",
         min=0.0,
         max=1.0,
         subtype='PERCENTAGE')
 
     centered = bpy.props.BoolProperty(
         name="Centered",
-        description="Specify if tenon is centered on width side",
+        description="Specify if mortise is centered on width side",
         default=True)
 
     shoulder_type = bpy.props.EnumProperty(
@@ -50,7 +50,7 @@ class TenonThicknessPropertyGroup(bpy.types.PropertyGroup):
 
     shoulder_value = bpy.props.FloatProperty(
         name="Shoulder",
-        description="Tenon shoulder on width side",
+        description="Mortise shoulder on width side",
         min=0.0,
         default=-1.0,
         subtype='DISTANCE',
@@ -60,7 +60,7 @@ class TenonThicknessPropertyGroup(bpy.types.PropertyGroup):
 
     shoulder_percentage = bpy.props.FloatProperty(
         name="Shoulder",
-        description="Tenon shoulder (relative to width side)",
+        description="Mortise shoulder (relative to width side)",
         min=0.0,
         max=1.0,
         subtype='PERCENTAGE')
@@ -71,7 +71,7 @@ class TenonThicknessPropertyGroup(bpy.types.PropertyGroup):
         default=False)
 
 
-class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
+class MortiseHeightPropertyGroup(bpy.types.PropertyGroup):
     type = bpy.props.EnumProperty(
         items=[('max',
                 "Max. height",
@@ -87,7 +87,7 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
 
     value = bpy.props.FloatProperty(
         name="Height",
-        description="Tenon height relative to length side",
+        description="Mortise height relative to length side",
         min=0.0,
         default=-1.0,
         subtype='DISTANCE',
@@ -97,14 +97,14 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
 
     percentage = bpy.props.FloatProperty(
         name="Height",
-        description="Tenon height relative to length side",
+        description="Mortise height relative to length side",
         min=0.0,
         max=1.0,
         subtype='PERCENTAGE')
 
     centered = bpy.props.BoolProperty(
         name="Centered",
-        description="Specify if tenon is centered on length side",
+        description="Specify if mortise is centered on length side",
         default=True)
 
     shoulder_type = bpy.props.EnumProperty(
@@ -119,7 +119,7 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
 
     shoulder_value = bpy.props.FloatProperty(
         name="Shoulder",
-        description="Tenon shoulder on length side",
+        description="Mortise shoulder on length side",
         min=0.0,
         default=-1.0,
         subtype='DISTANCE',
@@ -129,7 +129,7 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
 
     shoulder_percentage = bpy.props.FloatProperty(
         name="Shoulder",
-        description="Tenon shoulder (relative to length side)",
+        description="Mortise shoulder (relative to length side)",
         min=0.0,
         max=1.0,
         subtype='PERCENTAGE')
@@ -141,7 +141,7 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
 
     haunched = bpy.props.BoolProperty(
         name="Haunched",
-        description="Add a little stub tenon at the top of the joint",
+        description="Add a little stub mortise at the top of the joint",
         default=False)
 
     haunch_type = bpy.props.EnumProperty(
@@ -166,7 +166,7 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
 
     haunch_depth_percentage = bpy.props.FloatProperty(
         name="Haunch depth",
-        description="Haunch depth (relative to tenon depth)",
+        description="Haunch depth (relative to mortise depth)",
         min=0.0,
         max=1.0,
         subtype='PERCENTAGE')
@@ -182,14 +182,14 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
         default='straight')
 
 
-class TenonPropertyGroup(bpy.types.PropertyGroup):
+class MortisePropertyGroup(bpy.types.PropertyGroup):
     thickness_properties = bpy.props.PointerProperty(
-        type=TenonThicknessPropertyGroup)
-    height_properties = bpy.props.PointerProperty(type=TenonHeightPropertyGroup)
+        type=MortiseThicknessPropertyGroup)
+    height_properties = bpy.props.PointerProperty(type=MortiseHeightPropertyGroup)
 
     depth_value = bpy.props.FloatProperty(
         name="Depth",
-        description="Tenon depth",
+        description="Mortise depth",
         min=0.0,
         default=-1.0,
         subtype='DISTANCE',
@@ -199,20 +199,19 @@ class TenonPropertyGroup(bpy.types.PropertyGroup):
 
 
 def register():
-    bpy.utils.register_class(TenonThicknessPropertyGroup)
-    bpy.utils.register_class(TenonHeightPropertyGroup)
-    bpy.utils.register_class(TenonPropertyGroup)
+    bpy.utils.register_class(MortiseThicknessPropertyGroup)
+    bpy.utils.register_class(MortiseHeightPropertyGroup)
+    bpy.utils.register_class(MortisePropertyGroup)
 
-    bpy.types.Scene.tenonProperties = bpy.props.PointerProperty(
-        type=TenonPropertyGroup)
-
+    bpy.types.Scene.mortiseProperties = bpy.props.PointerProperty(
+        type=MortisePropertyGroup)
 
 def unregister():
-    bpy.utils.unregister_class(TenonPropertyGroup)
-    bpy.utils.unregister_class(TenonHeightPropertyGroup)
-    bpy.utils.unregister_class(TenonThicknessPropertyGroup)
+    bpy.utils.unregister_class(MortisePropertyGroup)
+    bpy.utils.unregister_class(MortiseHeightPropertyGroup)
+    bpy.utils.unregister_class(MortiseThicknessPropertyGroup)
 
-    del bpy.types.Scene.tenonProperties
+    del bpy.types.Scene.mortiseProperties
 
 # ----------------------------------------------
 # Code to run the script alone
