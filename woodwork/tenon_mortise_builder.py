@@ -385,8 +385,9 @@ class ShoulderFace:
 
 
 class TenonMortiseBuilder:
-    def __init__(self, face_to_be_transformed):
+    def __init__(self, face_to_be_transformed, builder_properties):
         self.face_to_be_transformed = face_to_be_transformed
+        self.builder_properties = builder_properties
 
     # Extrude and fatten to set face length
     def __set_face_depth(self, depth, bm, matrix_world, face):
@@ -466,10 +467,46 @@ class TenonMortiseBuilder:
             constraint_axis=constraint_axis_from_tangent(side_tangent),
             constraint_orientation='LOCAL')
 
-    def create(self, bm, matrix_world, tenon_properties):
+    # Raise a haunched tenon
+    def __raise_haunched_tenon(self,
+                               bm,
+                               matrix_world,
+                               tenon,
+                               face_to_be_transformed,
+                               height_shoulder):
+        builder_properties = self.builder_properties
+        height_properties = builder_properties.height_properties
+        if height_properties.haunch_angle == "sloped":
+            still_edge_tangent = \
+                face_to_be_transformed.shortest_side_tangent
+            if height_properties.reverse_shoulder:
+                still_edge_tangent.negate()
+            self.__set_face_sloped(height_properties.haunch_depth_value,
+                                   bm,
+                                   matrix_world,
+                                   height_shoulder.face,
+                                   still_edge_tangent)
+        else:
+            self.__set_face_depth(height_properties.haunch_depth_value,
+                                  bm,
+                                  matrix_world,
+                                  height_shoulder.face)
+        self.__raise_simple_tenon(bm, matrix_world, tenon)
+
+    # Raise a not haunched tenon
+    def __raise_simple_tenon(self, bm, matrix_world, tenon):
+        depth = self.builder_properties.depth_value
+        self.__set_face_depth(depth,
+                              bm,
+                              matrix_world,
+                              tenon.face)
+
+
+    def create(self, bm, matrix_world):
         face_to_be_transformed = self.face_to_be_transformed
-        thickness_properties = tenon_properties.thickness_properties
-        height_properties = tenon_properties.height_properties
+        builder_properties = self.builder_properties
+        thickness_properties = builder_properties.thickness_properties
+        height_properties = builder_properties.height_properties
 
         # Subdivide face
         subdivided_faces = face_to_be_transformed.subdivide_face(
@@ -605,27 +642,8 @@ class TenonMortiseBuilder:
                                     space=matrix_world,
                                     verts=list(verts_to_translate))
 
-        # Haunched tenon
+        # Raise tenon
         if not height_properties.centered and height_properties.haunched:
-
-            if height_properties.haunch_angle == "sloped":
-                still_edge_tangent = \
-                    face_to_be_transformed.shortest_side_tangent
-                if height_properties.reverse_shoulder:
-                    still_edge_tangent.negate()
-                self.__set_face_sloped(height_properties.haunch_depth_value,
-                                       bm,
-                                       matrix_world,
-                                       height_shoulder.face,
-                                       still_edge_tangent)
-            else:
-                self.__set_face_depth(height_properties.haunch_depth_value,
-                                      bm,
-                                      matrix_world,
-                                      height_shoulder.face)
-
-        # Set tenon depth
-        self.__set_face_depth(tenon_properties.depth_value,
-                              bm,
-                              matrix_world,
-                              tenon.face)
+            self.__raise_haunched_tenon(bm, matrix_world, tenon)
+        else:
+            self.__raise_simple_tenon(bm, matrix_world, tenon)

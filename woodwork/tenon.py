@@ -313,8 +313,10 @@ class TenonOperator(bpy.types.Operator):
             return {'CANCELLED'}
 
         # Create tenon
-        tenon_builder = TenonMortiseBuilder(face_to_be_transformed)
-        tenon_builder.create(bm, matrix_world, tenon_properties)
+        tenon_builder = TenonMortiseBuilder(
+            face_to_be_transformed,
+            tenon_properties)
+        tenon_builder.create(bm, matrix_world)
 
         # Flush selection
         bm.select_flush_mode()
