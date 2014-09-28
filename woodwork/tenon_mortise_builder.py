@@ -1,8 +1,9 @@
 import bmesh
 import bpy
-from mathutils.geometry import intersect_point_line
+from mathutils.geometry import intersect_point_line, distance_point_to_plane
 from math import pi
 from sys import float_info
+from collections import namedtuple
 
 def nearly_equal(a, b, epsilon=0.00001):
     abs_a = abs(a)
@@ -104,6 +105,7 @@ class FaceToBeTransformed:
             self.shortest_edges = [e0, face.loops[2].edge]
             self.shortest_length = length0
             self.longest_length = length1
+
 
     # Subdivide given edges and return created faces
     def __subdivide_edges(self, bm, edges_to_subdivide):
@@ -407,49 +409,54 @@ class TenonMortiseBuilder:
                             space=matrix_world,
                             verts=extruded_face.verts)
 
-        bpy.ops.mesh.select_all(action="DESELECT")
-        extruded_face.select = True
+        return extruded_face
 
     # Extrude and translate an edge of the face to set it sloped
     def __set_face_sloped(self,
                           depth,
                           bm,
                           matrix_world,
-                          face,
+                          face_to_extrude,
                           still_edge_tangent):
 
-        # Extrude face
-        ret = bmesh.ops.extrude_discrete_faces(bm, faces=[face])
+        face_normal = face_to_extrude.normal
 
+        # Extrude face
+        ret = bmesh.ops.extrude_discrete_faces(bm, faces=[face_to_extrude])
         extruded_face = ret['faces'][0]
         del ret
 
         # apply rotation to the normal
         rot_mat = matrix_world.copy().to_3x3().normalized()
-        normal_world = rot_mat * extruded_face.normal
+        normal_world = rot_mat * face_normal
         normal_world = normal_world * depth
 
-        # Find vertices to be translated
-        verts_to_translate = []
+        # Delete created face on still edge
+        found = False
+        for loop in extruded_face.loops:
+            edge = loop.edge
+            tangent = edge.calc_tangent(loop)
+            angle = tangent.angle(still_edge_tangent)
+            if nearly_equal(angle, 0.0):
+                still_edge = edge
+            elif nearly_equal(angle, pi):
+                edge_to_raise = edge
 
-        for edge in extruded_face.edges:
-            for loop in edge.link_loops:
-                if loop.face == extruded_face:
-                    tangent = edge.calc_tangent(loop)
-                    angle = tangent.angle(still_edge_tangent)
-                    if nearly_equal(angle, pi):
-                        for vert in edge.verts:
-                            verts_to_translate.append(vert)
-                        break
-                if len(verts_to_translate) > 0:
-                    break
-            if len(verts_to_translate) > 0:
+        for face in still_edge.link_faces:
+            if face is not extruded_face:
+                face_to_remove = face
                 break
 
+        delete_only_faces = 3
+        bmesh.ops.delete(bm, geom=[face_to_remove], context=delete_only_faces)
+
+        # Translate edge up
         bmesh.ops.translate(bm,
                             vec=normal_world,
                             space=matrix_world,
-                            verts=verts_to_translate)
+                            verts=edge_to_raise.verts)
+
+        return extruded_face
 
     # resize centered faces
     # TODO: use bmesh instead of bpy.ops
@@ -467,6 +474,173 @@ class TenonMortiseBuilder:
             constraint_axis=constraint_axis_from_tangent(side_tangent),
             constraint_orientation='LOCAL')
 
+    # Find tenon face adjacent to haunch
+    def __find__tenon_haunch_adjacent_face(self,
+                                           face_to_be_transformed,
+                                           tenon_top):
+        builder_properties = self.builder_properties
+        height_properties = builder_properties.height_properties
+
+        adjacent_face = None
+        shortest_side_tangent = \
+            face_to_be_transformed.shortest_side_tangent.copy()
+        if height_properties.reverse_shoulder:
+            shortest_side_tangent.negate()
+        for edge in tenon_top.edges:
+            for face in edge.link_faces:
+                if face != tenon_top:
+                    angle = shortest_side_tangent.angle(face.normal)
+                    if nearly_equal(angle, pi):
+                        adjacent_face = face
+                        break
+            if adjacent_face is not None:
+                break
+        return adjacent_face
+
+    # Find vertices in haunch touching tenon face
+    def __find_haunch_adjacent_edge(self, adjacent_face, haunch_top):
+        for edge in haunch_top.edges:
+            # find edge in plane adjacent_face
+            median = (edge.verts[0].co + edge.verts[1].co) / 2.0
+            dist = distance_point_to_plane(median, adjacent_face.verts[0].co,
+                                           adjacent_face.normal)
+            if dist < 0.00001:
+                adjacent_edge = edge
+                break
+        return adjacent_edge
+
+    def __find_tenon_faces_on_the_longest_side(self, face_to_be_transformed,
+                                               tenon_top):
+        longest_side_tangent = \
+            face_to_be_transformed.longest_side_tangent.copy()
+        found = []
+        for edge in tenon_top.edges:
+            for face in edge.link_faces:
+                if face != tenon_top:
+                    if same_direction(longest_side_tangent, face.normal):
+                        found.append(face)
+                        break
+        return found
+
+    def __find_haunch_faces_on_the_longest_side(self, face_to_be_transformed,
+                                                haunch_top):
+        longest_side_tangent = \
+            face_to_be_transformed.longest_side_tangent.copy()
+        found = []
+        for edge in haunch_top.edges:
+            for face in edge.link_faces:
+                if face != haunch_top:
+                    if same_direction(longest_side_tangent, face.normal):
+                        found.append(face)
+                        break
+        return found
+
+    # clean tenon : remove face adjacent to the haunch (visible with mortise)
+    def __beautify_haunched_tenon(self,
+                                  bm,
+                                  face_to_be_transformed,
+                                  tenon_top,
+                                  haunch_top):
+
+        # 1. Find tenon face adjacent to haunch
+        adjacent_face = self.__find__tenon_haunch_adjacent_face(
+            face_to_be_transformed, tenon_top)
+
+        # 2. Find vertices in haunch touching tenon face
+        adjacent_edge = self.__find_haunch_adjacent_edge(adjacent_face,
+                                                         haunch_top)
+
+        # 3. Split tenon edges at vertices
+        connections = []
+
+        for vert in adjacent_edge.verts:
+
+            nearest_edge = None
+            best_distance = float_info.max
+            for edge in adjacent_face.edges:
+                # find nearest edge
+                dist = distance_point_edge(vert.co, edge)
+                if dist < best_distance:
+                    nearest_edge = edge
+                    best_distance = dist
+            connection = dict()
+            connection['haunch_vert'] = vert
+            connection['tenon_edge'] = nearest_edge
+            connections.append(connection)
+
+        for connection in connections:
+            tenon_edge = connection['tenon_edge']
+            edge_start = tenon_edge.verts[0]
+            edge_end = tenon_edge.verts[1]
+            haunch_vert = connection['haunch_vert']
+            ret = intersect_point_line(haunch_vert.co, edge_start.co,
+                                       edge_end.co)
+            dist_in_percentage = ret[1]
+            ret = bmesh.utils.edge_split(tenon_edge, edge_start,
+                                         dist_in_percentage)
+            connection['new_vert'] = ret[1]
+            del ret
+
+        # 4. Merge created vertices from split edge with those of haunch top
+        # face
+        verts_to_merge = []
+        for connection in connections:
+            new_vert = connection['new_vert']
+            verts_to_merge.append(new_vert)
+
+        bmesh.ops.automerge(bm, verts=verts_to_merge, dist=0.00001)
+
+        # Geometry has changed from now on so all old references may be wrong
+        #  (adjacent_edge, adjacent_face ...)
+        adjacent_face = self.__find__tenon_haunch_adjacent_face(
+            face_to_be_transformed, tenon_top)
+        adjacent_edge = self.__find_haunch_adjacent_edge(adjacent_face,
+                                                         haunch_top)
+
+        # 5. Remove face connecting haunch and tenon
+        geom_to_delete = []
+        for face in adjacent_edge.link_faces:
+            if not face is haunch_top:
+                geom_to_delete.append(face)
+
+        delete_only_faces = 3
+        bmesh.ops.delete(bm, geom=geom_to_delete, context=delete_only_faces)
+
+        # 6. Remove old tenon face and unneeded edge below haunch
+
+        delete_faces = 5
+        bmesh.ops.delete(bm, geom=[adjacent_face], context=delete_faces)
+
+        # 7. Rebuild tenon face using new vertices
+        face_vertices = [adjacent_edge.verts[0], adjacent_edge.verts[1]]
+        shortest_side_tangent = \
+            face_to_be_transformed.shortest_side_tangent.copy()
+        builder_properties = self.builder_properties
+        height_properties = builder_properties.height_properties
+        if height_properties.reverse_shoulder:
+            shortest_side_tangent.negate()
+        for edge in tenon_top.edges:
+            for loop in edge.link_loops:
+                if loop.face == tenon_top:
+                    tangent = edge.calc_tangent(loop)
+                    angle = tangent.angle(shortest_side_tangent)
+                    if nearly_equal(angle, 0):
+                        face_vertices.append(edge.verts[0])
+                        face_vertices.append(edge.verts[1])
+                        break
+            if len(face_vertices) > 2:
+                break
+
+        bm.faces.new(face_vertices, tenon_top)
+
+        # 9. Dissolve faces on tenon sides
+        faces_to_dissolve = self.__find_tenon_faces_on_the_longest_side(
+            face_to_be_transformed, tenon_top)
+        faces_to_dissolve.extend(
+            self.__find_haunch_faces_on_the_longest_side(face_to_be_transformed,
+                                                         haunch_top))
+        bmesh.ops.dissolve_faces(bm, faces=faces_to_dissolve)
+
     # Raise a haunched tenon
     def __raise_haunched_tenon(self,
                                bm,
@@ -478,29 +652,43 @@ class TenonMortiseBuilder:
         height_properties = builder_properties.height_properties
         if height_properties.haunch_angle == "sloped":
             still_edge_tangent = \
-                face_to_be_transformed.shortest_side_tangent
+                face_to_be_transformed.shortest_side_tangent.copy()
             if height_properties.reverse_shoulder:
                 still_edge_tangent.negate()
-            self.__set_face_sloped(height_properties.haunch_depth_value,
-                                   bm,
-                                   matrix_world,
-                                   height_shoulder.face,
-                                   still_edge_tangent)
+            haunch_top = self.__set_face_sloped(
+                height_properties.haunch_depth_value,
+                bm,
+                matrix_world,
+                height_shoulder.face,
+                still_edge_tangent)
         else:
-            self.__set_face_depth(height_properties.haunch_depth_value,
-                                  bm,
-                                  matrix_world,
-                                  height_shoulder.face)
-        self.__raise_simple_tenon(bm, matrix_world, tenon)
+            haunch_top = self.__set_face_depth(
+                height_properties.haunch_depth_value,
+                bm,
+                matrix_world,
+                height_shoulder.face)
+
+        tenon_top = self.__set_face_depth(builder_properties.depth_value,
+                                          bm,
+                                          matrix_world,
+                                          tenon.face)
+
+        self.__beautify_haunched_tenon(bm, face_to_be_transformed, tenon_top,
+                                       haunch_top)
+
+        bpy.ops.mesh.select_all(action="DESELECT")
+        tenon_top.select = True
 
     # Raise a not haunched tenon
     def __raise_simple_tenon(self, bm, matrix_world, tenon):
         depth = self.builder_properties.depth_value
-        self.__set_face_depth(depth,
-                              bm,
-                              matrix_world,
-                              tenon.face)
+        extruded_face = self.__set_face_depth(depth,
+                                              bm,
+                                              matrix_world,
+                                              tenon.face)
 
+        bpy.ops.mesh.select_all(action="DESELECT")
+        extruded_face.select = True
 
     def create(self, bm, matrix_world):
         face_to_be_transformed = self.face_to_be_transformed
@@ -644,6 +832,7 @@ class TenonMortiseBuilder:
 
         # Raise tenon
         if not height_properties.centered and height_properties.haunched:
-            self.__raise_haunched_tenon(bm, matrix_world, tenon)
+            self.__raise_haunched_tenon(bm, matrix_world, tenon,
+                                        face_to_be_transformed, height_shoulder)
         else:
             self.__raise_simple_tenon(bm, matrix_world, tenon)

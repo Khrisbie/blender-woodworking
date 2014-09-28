@@ -11,8 +11,6 @@ from tenon_mortise_builder import TenonMortiseBuilder, FaceToBeTransformed, near
 def is_face_planar(face, error=0.0005):
     for v in face.verts:
         d = distance_point_to_plane(v.co, face.verts[0].co, face.normal)
-        if bpy.app.debug:
-            print("Distance: " + str(d))
         if d < -error or d > error:
             return False
     return True
