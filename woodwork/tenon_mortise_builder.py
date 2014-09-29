@@ -447,8 +447,52 @@ class TenonMortiseBuilder:
                 face_to_remove = face
                 break
 
-        delete_only_faces = 3
-        bmesh.ops.delete(bm, geom=[face_to_remove], context=delete_only_faces)
+        # remove only face and bottom edge (because there's no face bellow
+        # due tu extrude discrete faces)
+        extruded_face.tag = True
+        edge_to_raise.tag = True
+
+        delete_faces = 5
+        bmesh.ops.delete(bm, geom=[face_to_remove], context=delete_faces)
+
+        extruded_face_list = [f for f in bm.faces if f.tag]
+        extruded_face = extruded_face_list[0]
+        extruded_face.tag = False
+
+        # collapse remaining edges on the sides
+        edges_to_collapse = []
+        for loop in extruded_face.loops:
+            edge = loop.edge
+            tangent = edge.calc_tangent(loop)
+            angle = tangent.angle(still_edge_tangent)
+            if nearly_equal(angle, 0.0):
+                # find edge not in extruded_face
+                for vert in edge.verts:
+                    link_edges = vert.link_edges
+                    for link_edge in link_edges:
+                        if not link_edge is edge:
+                            has_linked_extruded_face = False
+                            link_faces = link_edge.link_faces
+                            for f in link_faces:
+                                if f is extruded_face:
+                                    has_linked_extruded_face = True
+                            if not has_linked_extruded_face:
+                                edges_to_collapse.append(link_edge)
+
+        extruded_face.tag = True
+        edge_to_raise.tag = True
+
+        for edge in edges_to_collapse:
+            verts = edge.verts
+            merge_co = verts[0].co
+            bmesh.ops.pointmerge(bm, verts=verts, merge_co=merge_co)
+
+        edge_to_raise_list = [e for e in bm.edges if e.tag and e.is_valid]
+        edge_to_raise = edge_to_raise_list[0]
+        edge_to_raise.tag = False
+        extruded_face_list = [f for f in bm.faces if f.tag and f.is_valid]
+        extruded_face = extruded_face_list[0]
+        extruded_face.tag = False
 
         # Translate edge up
         bmesh.ops.translate(bm,
@@ -479,17 +523,23 @@ class TenonMortiseBuilder:
                                            face_to_be_transformed,
                                            tenon_top):
         builder_properties = self.builder_properties
+        is_mortise = builder_properties.depth_value < 0.0
         height_properties = builder_properties.height_properties
 
         adjacent_face = None
         shortest_side_tangent = \
             face_to_be_transformed.shortest_side_tangent.copy()
+
         if height_properties.reverse_shoulder:
             shortest_side_tangent.negate()
+
         for edge in tenon_top.edges:
             for face in edge.link_faces:
                 if face != tenon_top:
-                    angle = shortest_side_tangent.angle(face.normal)
+                    normal = face.normal.copy()
+                    if is_mortise:
+                        normal.negate()
+                    angle = shortest_side_tangent.angle(normal)
                     if nearly_equal(angle, pi):
                         adjacent_face = face
                         break
@@ -499,12 +549,15 @@ class TenonMortiseBuilder:
 
     # Find vertices in haunch touching tenon face
     def __find_haunch_adjacent_edge(self, adjacent_face, haunch_top):
+        adjacent_edge = None
         for edge in haunch_top.edges:
             # find edge in plane adjacent_face
             median = (edge.verts[0].co + edge.verts[1].co) / 2.0
+
             dist = distance_point_to_plane(median, adjacent_face.verts[0].co,
                                            adjacent_face.normal)
-            if dist < 0.00001:
+
+            if abs(dist) < 0.00001:
                 adjacent_edge = edge
                 break
         return adjacent_edge
@@ -607,7 +660,6 @@ class TenonMortiseBuilder:
         bmesh.ops.delete(bm, geom=geom_to_delete, context=delete_only_faces)
 
         # 6. Remove old tenon face and unneeded edge below haunch
-
         delete_faces = 5
         bmesh.ops.delete(bm, geom=[adjacent_face], context=delete_faces)
 
