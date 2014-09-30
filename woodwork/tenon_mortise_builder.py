@@ -46,18 +46,26 @@ def constraint_axis_from_tangent(tangent):
         return False, True, False
     return False, False, True
 
+
 class TenonMortiseBuilderThickness:
     pass
 
 
-class TenonMortiseBuilderHeight:
+class TenonMortiseBuilderHaunch:
     pass
+
+
+class TenonMortiseBuilderHeight:
+    def __init__(self):
+        self.haunch_first_side = TenonMortiseBuilderHaunch()
+        self.haunch_second_side = TenonMortiseBuilderHaunch()
 
 
 class TenonMortiseBuilderProps:
     def __init__(self):
         self.height_properties = TenonMortiseBuilderHeight()
         self.thickness_properties = TenonMortiseBuilderThickness()
+
 
 # This describes the initial face where the tenon will be created
 class FaceToBeTransformed:
@@ -105,7 +113,6 @@ class FaceToBeTransformed:
             self.shortest_edges = [e0, face.loops[2].edge]
             self.shortest_length = length0
             self.longest_length = length1
-
 
     # Subdivide given edges and return created faces
     def __subdivide_edges(self, bm, edges_to_subdivide):
@@ -199,9 +206,8 @@ class TenonFace:
                             # a face (pointing inward into the face).
                             tangent = tenon_edge.calc_tangent(connected_loop)
 
-                            if same_direction(
-                                tangent,
-                                longest_side_tangent):
+                            if same_direction(tangent,
+                                              longest_side_tangent):
 
                                 self.height_faces.append(connected_face)
 
@@ -432,7 +438,6 @@ class TenonMortiseBuilder:
         normal_world = normal_world * depth
 
         # Delete created face on still edge
-        found = False
         for loop in extruded_face.loops:
             edge = loop.edge
             tangent = edge.calc_tangent(loop)
@@ -520,18 +525,13 @@ class TenonMortiseBuilder:
 
     # Find tenon face adjacent to haunch
     def __find__tenon_haunch_adjacent_face(self,
-                                           face_to_be_transformed,
+                                           side_tangent,
                                            tenon_top):
         builder_properties = self.builder_properties
         is_mortise = builder_properties.depth_value < 0.0
         height_properties = builder_properties.height_properties
 
         adjacent_face = None
-        shortest_side_tangent = \
-            face_to_be_transformed.shortest_side_tangent.copy()
-
-        if height_properties.reverse_shoulder:
-            shortest_side_tangent.negate()
 
         for edge in tenon_top.edges:
             for face in edge.link_faces:
@@ -539,7 +539,7 @@ class TenonMortiseBuilder:
                     normal = face.normal.copy()
                     if is_mortise:
                         normal.negate()
-                    angle = shortest_side_tangent.angle(normal)
+                    angle = side_tangent.angle(normal)
                     if nearly_equal(angle, pi):
                         adjacent_face = face
                         break
@@ -593,11 +593,12 @@ class TenonMortiseBuilder:
                                   bm,
                                   face_to_be_transformed,
                                   tenon_top,
-                                  haunch_top):
+                                  haunch_top,
+                                  side_tangent):
 
         # 1. Find tenon face adjacent to haunch
         adjacent_face = self.__find__tenon_haunch_adjacent_face(
-            face_to_be_transformed, tenon_top)
+            side_tangent, tenon_top)
 
         # 2. Find vertices in haunch touching tenon face
         adjacent_edge = self.__find_haunch_adjacent_edge(adjacent_face,
@@ -646,7 +647,7 @@ class TenonMortiseBuilder:
         # Geometry has changed from now on so all old references may be wrong
         #  (adjacent_edge, adjacent_face ...)
         adjacent_face = self.__find__tenon_haunch_adjacent_face(
-            face_to_be_transformed, tenon_top)
+            side_tangent, tenon_top)
         adjacent_edge = self.__find_haunch_adjacent_edge(adjacent_face,
                                                          haunch_top)
 
@@ -665,17 +666,12 @@ class TenonMortiseBuilder:
 
         # 7. Rebuild tenon face using new vertices
         face_vertices = [adjacent_edge.verts[0], adjacent_edge.verts[1]]
-        shortest_side_tangent = \
-            face_to_be_transformed.shortest_side_tangent.copy()
         builder_properties = self.builder_properties
-        height_properties = builder_properties.height_properties
-        if height_properties.reverse_shoulder:
-            shortest_side_tangent.negate()
         for edge in tenon_top.edges:
             for loop in edge.link_loops:
                 if loop.face == tenon_top:
                     tangent = edge.calc_tangent(loop)
-                    angle = tangent.angle(shortest_side_tangent)
+                    angle = tangent.angle(side_tangent)
                     if nearly_equal(angle, 0):
                         face_vertices.append(edge.verts[0])
                         face_vertices.append(edge.verts[1])
@@ -693,40 +689,56 @@ class TenonMortiseBuilder:
                                                          haunch_top))
         bmesh.ops.dissolve_faces(bm, faces=faces_to_dissolve)
 
+    def __raise_haunched_tenon_side(self, bm, matrix_world,
+                                    face_to_be_transformed, tenon_top,
+                                    side_tangent, shoulder, haunch_properties):
+        if haunch_properties.angle == "sloped":
+            haunch_top = self.__set_face_sloped(
+                haunch_properties.depth_value,
+                bm,
+                matrix_world,
+                shoulder.face,
+                side_tangent)
+        else:
+            haunch_top = self.__set_face_depth(
+                haunch_properties.depth_value,
+                bm,
+                matrix_world,
+                shoulder.face)
+
+        self.__beautify_haunched_tenon(bm, face_to_be_transformed, tenon_top,
+                                       haunch_top, side_tangent)
+
     # Raise a haunched tenon
     def __raise_haunched_tenon(self,
                                bm,
                                matrix_world,
                                tenon,
                                face_to_be_transformed,
-                               height_shoulder):
+                               first_shoulder,
+                               second_shoulder):
         builder_properties = self.builder_properties
-        height_properties = builder_properties.height_properties
-        if height_properties.haunch_angle == "sloped":
-            still_edge_tangent = \
-                face_to_be_transformed.shortest_side_tangent.copy()
-            if height_properties.reverse_shoulder:
-                still_edge_tangent.negate()
-            haunch_top = self.__set_face_sloped(
-                height_properties.haunch_depth_value,
-                bm,
-                matrix_world,
-                height_shoulder.face,
-                still_edge_tangent)
-        else:
-            haunch_top = self.__set_face_depth(
-                height_properties.haunch_depth_value,
-                bm,
-                matrix_world,
-                height_shoulder.face)
-
         tenon_top = self.__set_face_depth(builder_properties.depth_value,
                                           bm,
                                           matrix_world,
                                           tenon.face)
 
-        self.__beautify_haunched_tenon(bm, face_to_be_transformed, tenon_top,
-                                       haunch_top)
+        height_properties = builder_properties.height_properties
+        side_tangent = face_to_be_transformed.shortest_side_tangent.copy()
+
+        if height_properties.haunched_first_side:
+            haunch_properties = height_properties.haunch_first_side
+            self.__raise_haunched_tenon_side(bm, matrix_world,
+                                             face_to_be_transformed, tenon_top,
+                                             side_tangent, first_shoulder,
+                                             haunch_properties)
+        if height_properties.haunched_second_side:
+            side_tangent.negate()
+            haunch_properties = height_properties.haunch_second_side
+            self.__raise_haunched_tenon_side(bm, matrix_world,
+                                             face_to_be_transformed, tenon_top,
+                                             side_tangent, second_shoulder,
+                                             haunch_properties)
 
         bpy.ops.mesh.select_all(action="DESELECT")
         tenon_top.select = True
@@ -774,12 +786,22 @@ class TenonMortiseBuilder:
 
         # Set tenon shoulder on height side
         if not height_properties.centered:
-            height_shoulder = ShoulderFace()
-            height_shoulder.get_from_tenon(
+            first_shoulder = ShoulderFace()
+            second_shoulder = ShoulderFace()
+            first_shoulder.get_from_tenon(
                 tenon,
                 tenon.thickness_faces,
-                height_properties.reverse_shoulder,
+                False,
                 face_to_be_transformed.shortest_edges)
+            second_shoulder.get_from_tenon(
+                tenon,
+                tenon.thickness_faces,
+                True,
+                face_to_be_transformed.shortest_edges)
+            if height_properties.reverse_shoulder:
+                height_shoulder = second_shoulder
+            else:
+                height_shoulder = first_shoulder
 
             height_shoulder_verts_to_translate = \
                 height_shoulder.find_verts_to_translate(
@@ -883,8 +905,10 @@ class TenonMortiseBuilder:
                                     verts=list(verts_to_translate))
 
         # Raise tenon
-        if not height_properties.centered and height_properties.haunched:
+        if not height_properties.centered and (
+                height_properties.haunched_first_side or
+                height_properties.haunched_second_side):
             self.__raise_haunched_tenon(bm, matrix_world, tenon,
-                                        face_to_be_transformed, height_shoulder)
+                                        face_to_be_transformed, first_shoulder, second_shoulder)
         else:
             self.__raise_simple_tenon(bm, matrix_world, tenon)

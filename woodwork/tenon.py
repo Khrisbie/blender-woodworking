@@ -5,6 +5,7 @@ from mathutils.geometry import distance_point_to_plane
 from math import pi
 from tenon_mortise_builder import TenonMortiseBuilder, FaceToBeTransformed, nearly_equal
 
+
 # is_face_planar
 #
 # Tests a face to see if it is planar.
@@ -66,6 +67,78 @@ class TenonOperator(bpy.types.Operator):
             return False
         return True
 
+    def __draw_thickness_properties(self, layout, thickness_properties):
+        width_side_box = layout.box()
+        width_side_box.label(text="Thickness type")
+        width_side_box.prop(thickness_properties, "type", text="")
+        if thickness_properties.type == "value":
+            width_side_box.prop(thickness_properties, "value", text="")
+        elif thickness_properties.type == "percentage":
+            width_side_box.prop(thickness_properties, "percentage", text="",
+                                slider=True)
+        width_side_box.label(text="Position")
+        width_side_box.prop(thickness_properties, "centered")
+        if not thickness_properties.centered:
+            width_side_box.label(text="Thickness shoulder type")
+            width_side_box.prop(thickness_properties, "shoulder_type",
+                                text="")
+            if thickness_properties.shoulder_type == "value":
+                width_side_box.prop(thickness_properties, "shoulder_value",
+                                    text="")
+            elif thickness_properties.shoulder_type == "percentage":
+                width_side_box.prop(thickness_properties,
+                                    "shoulder_percentage", text="",
+                                    slider=True)
+            width_side_box.prop(thickness_properties, "reverse_shoulder")
+
+    def __draw_haunch_properties(self, layout, haunch_properties):
+        layout.label(text="Haunch depth type")
+        layout.prop(haunch_properties, "type",
+                    text="")
+        if haunch_properties.type == "value":
+            layout.prop(haunch_properties,
+                        "depth_value", text="")
+        elif haunch_properties.type == "percentage":
+            layout.prop(haunch_properties,
+                        "depth_percentage", text="",
+                        slider=True)
+        layout.label(text="Haunch angle")
+        layout.prop(haunch_properties, "angle", text="")
+
+    def __draw_height_properties(self, layout, height_properties):
+        length_side_box = layout.box()
+        length_side_box.label(text="Height type")
+        length_side_box.prop(height_properties, "type", text="")
+        if height_properties.type == "value":
+            length_side_box.prop(height_properties, "value", text="")
+        elif height_properties.type == "percentage":
+            length_side_box.prop(height_properties, "percentage", text="",
+                                 slider=True)
+        length_side_box.label(text="Position")
+        length_side_box.prop(height_properties, "centered")
+        if not height_properties.centered:
+            length_side_box.label(text="Height shoulder type")
+            length_side_box.prop(height_properties, "shoulder_type",
+                                 text="")
+            if height_properties.shoulder_type == "value":
+                length_side_box.prop(height_properties, "shoulder_value",
+                                     text="")
+            elif height_properties.shoulder_type == "percentage":
+                length_side_box.prop(height_properties,
+                                     "shoulder_percentage",
+                                     text="", slider=True)
+            length_side_box.prop(height_properties, "reverse_shoulder")
+            length_side_box.prop(height_properties, "haunched_first_side")
+            if height_properties.haunched_first_side:
+                haunch_properties = height_properties.haunch_first_side
+                self.__draw_haunch_properties(length_side_box,
+                                              haunch_properties)
+            length_side_box.prop(height_properties, "haunched_second_side")
+            if height_properties.haunched_second_side:
+                haunch_properties = height_properties.haunch_second_side
+                self.__draw_haunch_properties(length_side_box,
+                                              haunch_properties)
+
     # Custom layout
     def draw(self, context):
         layout = self.layout
@@ -84,29 +157,7 @@ class TenonOperator(bpy.types.Operator):
             row.prop(self, "expand_thickness_properties", icon="TRIA_DOWN",
                      icon_only=True, text="Width side",
                      emboss=False)
-
-            width_side_box = layout.box()
-            width_side_box.label(text="Thickness type")
-            width_side_box.prop(thickness_properties, "type", text="")
-            if thickness_properties.type == "value":
-                width_side_box.prop(thickness_properties, "value", text="")
-            elif thickness_properties.type == "percentage":
-                width_side_box.prop(thickness_properties, "percentage", text="",
-                                    slider=True)
-            width_side_box.label(text="Position")
-            width_side_box.prop(thickness_properties, "centered")
-            if not thickness_properties.centered:
-                width_side_box.label(text="Thickness shoulder type")
-                width_side_box.prop(thickness_properties, "shoulder_type",
-                                    text="")
-                if thickness_properties.shoulder_type == "value":
-                    width_side_box.prop(thickness_properties, "shoulder_value",
-                                        text="")
-                elif thickness_properties.shoulder_type == "percentage":
-                    width_side_box.prop(thickness_properties,
-                                        "shoulder_percentage", text="",
-                                        slider=True)
-                width_side_box.prop(thickness_properties, "reverse_shoulder")
+            self.__draw_thickness_properties(layout, thickness_properties)
 
         row = layout.row(align=True)
         row.alignment = 'EXPAND'
@@ -118,44 +169,7 @@ class TenonOperator(bpy.types.Operator):
             row.prop(self, "expand_height_properties", icon="TRIA_DOWN",
                      icon_only=True, text="Length side",
                      emboss=False)
-
-            length_side_box = layout.box()
-            length_side_box.label(text="Height type")
-            length_side_box.prop(height_properties, "type", text="")
-            if height_properties.type == "value":
-                length_side_box.prop(height_properties, "value", text="")
-            elif height_properties.type == "percentage":
-                length_side_box.prop(height_properties, "percentage", text="",
-                                     slider=True)
-            length_side_box.label(text="Position")
-            length_side_box.prop(height_properties, "centered")
-            if not height_properties.centered:
-                length_side_box.label(text="Height shoulder type")
-                length_side_box.prop(height_properties, "shoulder_type",
-                                     text="")
-                if height_properties.shoulder_type == "value":
-                    length_side_box.prop(height_properties, "shoulder_value",
-                                         text="")
-                elif height_properties.shoulder_type == "percentage":
-                    length_side_box.prop(height_properties,
-                                         "shoulder_percentage",
-                                         text="", slider=True)
-                length_side_box.prop(height_properties, "reverse_shoulder")
-                length_side_box.prop(height_properties, "haunched")
-                if height_properties.haunched:
-                    length_side_box.label(text="Haunch depth type")
-                    length_side_box.prop(height_properties, "haunch_type",
-                                         text="")
-                    if height_properties.haunch_type == "value":
-                        length_side_box.prop(height_properties,
-                                             "haunch_depth_value", text="")
-                    elif height_properties.haunch_type == "percentage":
-                        length_side_box.prop(height_properties,
-                                             "haunch_depth_percentage", text="",
-                                             slider=True)
-                    length_side_box.label(text="Haunch angle")
-                    length_side_box.prop(height_properties, "haunch_angle",
-                                         text="")
+            self.__draw_height_properties(layout, height_properties)
 
         layout.label(text="Depth")
         layout.prop(tenon_properties, "depth_value", text="")
@@ -222,9 +236,14 @@ class TenonOperator(bpy.types.Operator):
                                   self.longest_length))):
             tenon_properties.depth_value = \
                 face_to_be_transformed.shortest_length
-            height_properties.haunch_depth_value = \
+            haunch_properties = height_properties.haunch_first_side
+            haunch_properties.depth_value = \
                 tenon_properties.depth_value / 3.0
-            height_properties.haunch_depth_percentage = 1.0 / 3.0
+            haunch_properties.depth_percentage = 1.0 / 3.0
+            haunch_properties = height_properties.haunch_second_side
+            haunch_properties.depth_value = \
+                tenon_properties.depth_value / 3.0
+            haunch_properties.depth_percentage = 1.0 / 3.0
 
         # used to reinit default values when face changes
         self.shortest_length = face_to_be_transformed.shortest_length
@@ -284,10 +303,19 @@ class TenonOperator(bpy.types.Operator):
                     height_properties.value / \
                     face_to_be_transformed.longest_length
 
-        if height_properties.haunch_type == "percentage":
-            height_properties.haunch_depth_value = \
-                tenon_properties.depth_value * \
-                height_properties.haunch_depth_percentage
+        if height_properties.haunch_first_side:
+            haunch_properties = height_properties.haunch_first_side
+            if haunch_properties.type == "percentage":
+                haunch_properties.depth_value = \
+                    tenon_properties.depth_value * \
+                    haunch_properties.depth_percentage
+
+        if height_properties.haunched_second_side:
+            haunch_properties = height_properties.haunch_second_side
+            if haunch_properties.type == "percentage":
+                haunch_properties.depth_value = \
+                    tenon_properties.depth_value * \
+                    haunch_properties.depth_percentage
 
         # Check input values
         total_length = height_properties.shoulder_value + \
