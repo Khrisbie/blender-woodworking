@@ -4,6 +4,62 @@ from mathutils.geometry import intersect_point_line, distance_point_to_plane
 from math import pi
 from sys import float_info
 from collections import namedtuple
+from enum import IntEnum
+
+
+# Used to retrieve faces when geometry has been deleted and faces reordered
+class ReferenceGeometry(IntEnum):
+    faceToBeTransformed = 1
+    firstShoulder = 2
+    secondShoulder = 3
+    extruded = 4
+    tenonHaunchAdjacentFace = 5
+    edgeToRaise = 6
+    haunchAdjacentEdge = 7
+
+
+# Use bmesh layers to retrieve faces
+class GeometryRetriever:
+    def __init__(self):
+        self.bm = None
+        self.face_retriever = None
+        self.edge_retriever = None
+
+    def create(self, bm):
+        self.bm = bm
+        self.face_retriever = bm.faces.layers.int.new("face_retriever")
+        self.edge_retriever = bm.edges.layers.int.new("edge_retriever")
+
+    def save_face(self, face, reference_geometry):
+        face[self.face_retriever] = int(reference_geometry)
+
+    def retrieve_face(self, reference_geometry, remove_ref=True):
+        found = None
+        for f in self.bm.faces:
+            if f[self.face_retriever] == int(reference_geometry):
+                found = f
+                if remove_ref:
+                    f[self.face_retriever] = 0
+                break
+        return found
+
+    def save_edge(self, edge, reference_geometry):
+        edge[self.edge_retriever] = int(reference_geometry)
+
+    def retrieve_edge(self, reference_geometry, remove_ref=True):
+        found = None
+        for e in self.bm.edges:
+            if e[self.edge_retriever] == int(reference_geometry):
+                found = e
+                if remove_ref:
+                    e[self.edge_retriever] = 0
+                break
+        return found
+
+    def destroy(self):
+        self.bm.faces.layers.int.remove(self.face_retriever)
+        self.bm.edges.layers.int.remove(self.edge_retriever)
+
 
 def nearly_equal(a, b, epsilon=0.00001):
     abs_a = abs(a)
@@ -396,10 +452,10 @@ class TenonMortiseBuilder:
     def __init__(self, face_to_be_transformed, builder_properties):
         self.face_to_be_transformed = face_to_be_transformed
         self.builder_properties = builder_properties
+        self.geometry_retriever = GeometryRetriever()
 
     # Extrude and fatten to set face length
     def __set_face_depth(self, depth, bm, matrix_world, face):
-
         ret = bmesh.ops.extrude_discrete_faces(bm, faces=[face])
 
         extruded_face = ret['faces'][0]
@@ -454,15 +510,16 @@ class TenonMortiseBuilder:
 
         # remove only face and bottom edge (because there's no face bellow
         # due tu extrude discrete faces)
-        extruded_face.tag = True
-        edge_to_raise.tag = True
+        self.geometry_retriever.save_face(extruded_face,
+                                          ReferenceGeometry.extruded)
+        self.geometry_retriever.save_edge(edge_to_raise,
+                                          ReferenceGeometry.edgeToRaise)
 
         delete_faces = 5
         bmesh.ops.delete(bm, geom=[face_to_remove], context=delete_faces)
 
-        extruded_face_list = [f for f in bm.faces if f.tag]
-        extruded_face = extruded_face_list[0]
-        extruded_face.tag = False
+        extruded_face = self.geometry_retriever.retrieve_face(
+            ReferenceGeometry.extruded, removeRef=False)
 
         # collapse remaining edges on the sides
         edges_to_collapse = []
@@ -484,20 +541,15 @@ class TenonMortiseBuilder:
                             if not has_linked_extruded_face:
                                 edges_to_collapse.append(link_edge)
 
-        extruded_face.tag = True
-        edge_to_raise.tag = True
-
         for edge in edges_to_collapse:
             verts = edge.verts
             merge_co = verts[0].co
             bmesh.ops.pointmerge(bm, verts=verts, merge_co=merge_co)
 
-        edge_to_raise_list = [e for e in bm.edges if e.tag and e.is_valid]
-        edge_to_raise = edge_to_raise_list[0]
-        edge_to_raise.tag = False
-        extruded_face_list = [f for f in bm.faces if f.tag and f.is_valid]
-        extruded_face = extruded_face_list[0]
-        extruded_face.tag = False
+        extruded_face = self.geometry_retriever.retrieve_face(
+            ReferenceGeometry.extruded)
+        edge_to_raise = self.geometry_retriever.retrieve_edge(
+            ReferenceGeometry.edgeToRaise)
 
         # Translate edge up
         bmesh.ops.translate(bm,
@@ -552,7 +604,7 @@ class TenonMortiseBuilder:
         adjacent_edge = None
         for edge in haunch_top.edges:
             # find edge in plane adjacent_face
-            median = (edge.verts[0].co + edge.verts[1].co) / 2.0
+            median = (edge.verts[0].co + edge.verts[1].co) * 0.5
 
             dist = distance_point_to_plane(median, adjacent_face.verts[0].co,
                                            adjacent_face.normal)
@@ -599,10 +651,15 @@ class TenonMortiseBuilder:
         # 1. Find tenon face adjacent to haunch
         adjacent_face = self.__find__tenon_haunch_adjacent_face(
             side_tangent, tenon_top)
+        geometry_retriever_type = ReferenceGeometry.tenonHaunchAdjacentFace
+        self.geometry_retriever.save_face(adjacent_face,
+                                          geometry_retriever_type)
 
         # 2. Find vertices in haunch touching tenon face
         adjacent_edge = self.__find_haunch_adjacent_edge(adjacent_face,
                                                          haunch_top)
+        self.geometry_retriever.save_edge(adjacent_edge,
+                                          ReferenceGeometry.haunchAdjacentEdge)
 
         # 3. Split tenon edges at vertices
         connections = []
@@ -646,10 +703,10 @@ class TenonMortiseBuilder:
 
         # Geometry has changed from now on so all old references may be wrong
         #  (adjacent_edge, adjacent_face ...)
-        adjacent_face = self.__find__tenon_haunch_adjacent_face(
-            side_tangent, tenon_top)
-        adjacent_edge = self.__find_haunch_adjacent_edge(adjacent_face,
-                                                         haunch_top)
+        adjacent_face = self.geometry_retriever.retrieve_face(
+            ReferenceGeometry.tenonHaunchAdjacentFace)
+        adjacent_edge = self.geometry_retriever.retrieve_edge(
+            ReferenceGeometry.haunchAdjacentEdge)
 
         # 5. Remove face connecting haunch and tenon
         geom_to_delete = []
@@ -718,10 +775,24 @@ class TenonMortiseBuilder:
                                first_shoulder,
                                second_shoulder):
         builder_properties = self.builder_properties
+
+        # save some faces
+        self.geometry_retriever.save_face(first_shoulder.face,
+                                          ReferenceGeometry.firstShoulder)
+        self.geometry_retriever.save_face(second_shoulder.face,
+                                          ReferenceGeometry.secondShoulder)
+
         tenon_top = self.__set_face_depth(builder_properties.depth_value,
                                           bm,
                                           matrix_world,
                                           tenon.face)
+
+        # extrude used by __set_face_depth could reorder faces (destructive op)
+        # so retrieve saved faces
+        first_shoulder.face = self.geometry_retriever.retrieve_face(
+            ReferenceGeometry.firstShoulder)
+        second_shoulder.face = self.geometry_retriever.retrieve_face(
+            ReferenceGeometry.secondShoulder)
 
         height_properties = builder_properties.height_properties
         side_tangent = face_to_be_transformed.shortest_side_tangent.copy()
@@ -755,10 +826,23 @@ class TenonMortiseBuilder:
         extruded_face.select = True
 
     def create(self, bm, matrix_world):
+
         face_to_be_transformed = self.face_to_be_transformed
         builder_properties = self.builder_properties
         thickness_properties = builder_properties.thickness_properties
         height_properties = builder_properties.height_properties
+
+        # Create layers to retrieve geometry when data are deleted (this will
+        # reorder face so face_to_be_transformed is not valid anymore ...)
+        for face in bm.faces:
+            face.tag = False
+        for edge in bm.edges:
+            edge.tag = False
+        face_to_be_transformed.face.tag = True
+        self.geometry_retriever.create(bm)
+        tagged_faces = [f for f in bm.faces if f.tag]
+        face_to_be_transformed.face = tagged_faces[0]
+        face_to_be_transformed.face.tag = False
 
         # Subdivide face
         subdivided_faces = face_to_be_transformed.subdivide_face(
@@ -798,6 +882,7 @@ class TenonMortiseBuilder:
                 tenon.thickness_faces,
                 True,
                 face_to_be_transformed.shortest_edges)
+
             if height_properties.reverse_shoulder:
                 height_shoulder = second_shoulder
             else:
@@ -906,9 +991,12 @@ class TenonMortiseBuilder:
 
         # Raise tenon
         if not height_properties.centered and (
-                height_properties.haunched_first_side or
-                height_properties.haunched_second_side):
+                    height_properties.haunched_first_side or
+                    height_properties.haunched_second_side):
             self.__raise_haunched_tenon(bm, matrix_world, tenon,
-                                        face_to_be_transformed, first_shoulder, second_shoulder)
+                                        face_to_be_transformed, first_shoulder,
+                                        second_shoulder)
         else:
             self.__raise_simple_tenon(bm, matrix_world, tenon)
+
+        self.geometry_retriever.destroy()
