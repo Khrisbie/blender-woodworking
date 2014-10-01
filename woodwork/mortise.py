@@ -1,7 +1,12 @@
 import bpy
 import bmesh
-from tenon_mortise_builder import TenonMortiseBuilder, TenonMortiseBuilderProps, FaceToBeTransformed, nearly_equal
-from tenon import is_face_planar, is_face_rectangular
+from woodwork.tenon_mortise_builder import (TenonMortiseBuilder,
+                                            TenonMortiseBuilderProps,
+                                            FaceToBeTransformed,
+                                            nearly_equal)
+from woodwork.tenon import (is_face_planar,
+                            is_face_rectangular)
+
 
 class MortiseOperator(bpy.types.Operator):
     bl_description = "Creates a mortise given a face"

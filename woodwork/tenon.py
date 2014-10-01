@@ -3,7 +3,9 @@ import bmesh
 from mathutils import Vector, Matrix
 from mathutils.geometry import distance_point_to_plane
 from math import pi
-from tenon_mortise_builder import TenonMortiseBuilder, FaceToBeTransformed, nearly_equal
+from woodwork.tenon_mortise_builder import (TenonMortiseBuilder,
+                                            FaceToBeTransformed,
+                                            nearly_equal)
 
 
 # is_face_planar

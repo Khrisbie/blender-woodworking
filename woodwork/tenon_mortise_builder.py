@@ -1,6 +1,7 @@
 import bmesh
 import bpy
-from mathutils.geometry import intersect_point_line, distance_point_to_plane
+from mathutils.geometry import (intersect_point_line,
+                                distance_point_to_plane)
 from math import pi
 from sys import float_info
 from collections import namedtuple
