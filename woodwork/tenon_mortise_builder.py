@@ -519,7 +519,7 @@ class TenonMortiseBuilder:
         bmesh.ops.delete(bm, geom=[face_to_remove], context=delete_faces)
 
         extruded_face = self.geometry_retriever.retrieve_face(
-            ReferenceGeometry.extruded, removeRef=False)
+            ReferenceGeometry.extruded, remove_ref=False)
 
         # collapse remaining edges on the sides
         edges_to_collapse = []
@@ -843,6 +843,7 @@ class TenonMortiseBuilder:
         tagged_faces = [f for f in bm.faces if f.tag]
         face_to_be_transformed.face = tagged_faces[0]
         face_to_be_transformed.face.tag = False
+        face_to_be_transformed.extract_features(matrix_world)
 
         # Subdivide face
         subdivided_faces = face_to_be_transformed.subdivide_face(
