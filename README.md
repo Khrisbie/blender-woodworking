@@ -20,7 +20,7 @@ To get the latest available sources, clone the git repository or download all py
 
 ## Tenon
 
-![Sample rendered tenon](/screenshots/sample_rendered.png)
+![Sample rendered tenon](/screenshots/sample_tenon.png)
 
 ### Description
 This operator will generate a new tenon on the selected quad face in edit mode.
@@ -62,6 +62,20 @@ The tenon panel is organized in three parts :
 3. Depth
 
   Sets the tenon depth value.
+
+## Mortise
+
+![Sample rendered mortise](/screenshots/sample_mortise.png)
+
+### Description
+This operator will generate a new mortise on the selected quad face in edit mode.
+
+### Requirements
+Object should be in edit mode, a **quad** face should be selected and it must be planar and _rectangular_.
+
+### Usage
+
+The mortise panel is organized as the tenon panel, in three parts. Check tenon panel usage for more information.
 
 # Units
 In blender, you can change the default "blender unit" to **metric units** in the scene properties. 
