@@ -91,9 +91,11 @@ def distance_point_edge(pt, edge):
 
 
 def vector_abs(vector):
+    vector = vector.copy()
     for i in range(len(vector)):
         if vector[i] < 0.0:
             vector[i] = abs(vector[i])
+    return vector
 
 
 def constraint_axis_from_tangent(tangent):
@@ -561,20 +563,52 @@ class TenonMortiseBuilder:
         return extruded_face
 
     # resize centered faces
-    # TODO: use bmesh instead of bpy.ops
-    def __resize_faces(self, faces, side_tangent, scale_factor):
-
-        bpy.ops.mesh.select_all(action="DESELECT")
+    def __resize_faces(self, bm, faces, side_tangent, scale_factor):
+        verts_to_translate_side_neg = set()
+        verts_to_translate_side_pos = set()
+        translate_vector_pos = None
+        translate_vector_neg = None
         for faceToResize in faces:
-            faceToResize.select = True
+            for edge in faceToResize.edges:
+                v0 = edge.verts[0]
+                v1 = edge.verts[1]
+                edge_vector = v1.co - v0.co
+                if same_direction(edge_vector, side_tangent):
 
-        vector_abs(side_tangent)
-        resize_value = side_tangent * scale_factor
+                    center = (v1.co + v0.co) * 0.5
+                    signed_distance = distance_point_to_plane(v0.co, center,
+                                                              side_tangent)
+                    if signed_distance < 0.0:
+                        verts_to_translate_side_neg.add(v0)
+                        verts_to_translate_side_pos.add(v1)
+                    else:
+                        verts_to_translate_side_pos.add(v0)
+                        verts_to_translate_side_neg.add(v1)
 
-        bpy.ops.transform.resize(
-            value=resize_value,
-            constraint_axis=constraint_axis_from_tangent(side_tangent),
-            constraint_orientation='LOCAL')
+                    if translate_vector_pos is None:
+                        if signed_distance < 0.0:
+                            vector_to_translate_neg = v0.co - center
+                            vector_to_translate_pos = v1.co - center
+                        else:
+                            vector_to_translate_neg = v1.co - center
+                            vector_to_translate_pos = v0.co - center
+                        final_vector_neg = vector_to_translate_neg * \
+                            scale_factor
+                        final_vector_pos = vector_to_translate_pos * \
+                            scale_factor
+                        translate_vector_neg = final_vector_neg - \
+                            vector_to_translate_neg
+                        translate_vector_pos = final_vector_pos - \
+                            vector_to_translate_pos
+
+        bmesh.ops.translate(
+            bm,
+            vec=translate_vector_pos,
+            verts=list(verts_to_translate_side_pos))
+        bmesh.ops.translate(
+            bm,
+            vec=translate_vector_neg,
+            verts=list(verts_to_translate_side_neg))
 
     # Find tenon face adjacent to haunch
     def __find__tenon_haunch_adjacent_face(self,
@@ -582,7 +616,6 @@ class TenonMortiseBuilder:
                                            tenon_top):
         builder_properties = self.builder_properties
         is_mortise = builder_properties.depth_value < 0.0
-        height_properties = builder_properties.height_properties
 
         adjacent_face = None
 
@@ -724,7 +757,6 @@ class TenonMortiseBuilder:
 
         # 7. Rebuild tenon face using new vertices
         face_vertices = [adjacent_edge.verts[0], adjacent_edge.verts[1]]
-        builder_properties = self.builder_properties
         for edge in tenon_top.edges:
             for loop in edge.link_loops:
                 if loop.face == tenon_top:
@@ -939,6 +971,7 @@ class TenonMortiseBuilder:
             if thickness_properties.centered:
                 # centered
                 self.__resize_faces(
+                    bm,
                     tenon.thickness_faces,
                     face_to_be_transformed.longest_side_tangent,
                     scale_factor)
@@ -970,6 +1003,7 @@ class TenonMortiseBuilder:
             if height_properties.centered:
                 # centered
                 self.__resize_faces(
+                    bm,
                     tenon.height_faces,
                     face_to_be_transformed.shortest_side_tangent,
                     scale_factor)
@@ -993,8 +1027,8 @@ class TenonMortiseBuilder:
 
         # Raise tenon
         if not height_properties.centered and (
-                    height_properties.haunched_first_side or
-                    height_properties.haunched_second_side):
+                height_properties.haunched_first_side or
+                height_properties.haunched_second_side):
             self.__raise_haunched_tenon(bm, matrix_world, tenon,
                                         face_to_be_transformed, first_shoulder,
                                         second_shoulder)

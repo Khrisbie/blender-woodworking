@@ -209,11 +209,6 @@ class TenonOperator(bpy.types.Operator):
         if not self.__check_face(face):
             return {'CANCELLED'}
 
-        # Split edges to avoid affecting linked faces when subdividing
-        edges_to_split = [edge for edge in face.edges]
-        ret = bmesh.ops.split_edges(bm, edges=edges_to_split)
-        del ret
-
         # Extract face infos
         face_to_be_transformed = FaceToBeTransformed(face)
         face_to_be_transformed.extract_features(matrix_world)
