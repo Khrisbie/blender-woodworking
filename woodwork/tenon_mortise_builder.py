@@ -8,6 +8,9 @@ from collections import namedtuple
 from enum import IntEnum
 
 
+ZERO_TOLERANCE = 0.00001
+
+
 # Used to retrieve faces when geometry has been deleted and faces reordered
 class ReferenceGeometry(IntEnum):
     faceToBeTransformed = 1
@@ -62,7 +65,7 @@ class GeometryRetriever:
         self.bm.edges.layers.int.remove(self.edge_retriever)
 
 
-def nearly_equal(a, b, epsilon=0.00001):
+def nearly_equal(a, b, epsilon=ZERO_TOLERANCE):
     abs_a = abs(a)
     abs_b = abs(b)
     diff = abs(a - b)
@@ -174,7 +177,8 @@ class FaceToBeTransformed:
             self.longest_length = length1
 
     # Subdivide given edges and return created faces
-    def __subdivide_edges(self, bm, edges_to_subdivide):
+    @staticmethod
+    def __subdivide_edges(bm, edges_to_subdivide):
         ret = bmesh.ops.subdivide_edges(
             bm,
             edges=edges_to_subdivide,
@@ -220,7 +224,7 @@ class FaceToBeTransformed:
         elif not (max_centered_height and max_centered_thickness):
             edges_to_subdivide = self.face.edges
 
-        return self.__subdivide_edges(bm, edges_to_subdivide)
+        return FaceToBeTransformed.__subdivide_edges(bm, edges_to_subdivide)
 
 
 # This structure keep info about the newly created tenon face
@@ -308,7 +312,8 @@ class TenonFace:
             else:
                 self.height_reference_edge = e1
 
-    def get_scale_factor(self, reference_edge, matrix_world, resize_value):
+    @staticmethod
+    def get_scale_factor(reference_edge, matrix_world, resize_value):
         v0 = reference_edge.verts[0].co
         v1 = reference_edge.verts[1].co
 
@@ -319,8 +324,8 @@ class TenonFace:
 
         return resize_value / to_be_resized
 
-    def compute_translation_vector_given_shoulder(self,
-                                                  reference_edge,
+    @staticmethod
+    def compute_translation_vector_given_shoulder(reference_edge,
                                                   shoulder,
                                                   scale_factor,
                                                   matrix_world):
@@ -342,7 +347,8 @@ class TenonFace:
 
         return final_vector - edge_vector
 
-    def find_verts_to_translate(self, tenon_faces, shoulder_verts):
+    @staticmethod
+    def find_verts_to_translate(tenon_faces, shoulder_verts):
         tenon_verts = set()
         for face in tenon_faces:
             verts = face.verts
@@ -458,7 +464,8 @@ class TenonMortiseBuilder:
         self.geometry_retriever = GeometryRetriever()
 
     # Extrude and fatten to set face length
-    def __set_face_depth(self, depth, bm, matrix_world, face):
+    @staticmethod
+    def __set_face_depth(depth, bm, matrix_world, face):
         ret = bmesh.ops.extrude_discrete_faces(bm, faces=[face])
 
         extruded_face = ret['faces'][0]
@@ -563,7 +570,8 @@ class TenonMortiseBuilder:
         return extruded_face
 
     # resize centered faces
-    def __resize_faces(self, bm, faces, side_tangent, scale_factor):
+    @staticmethod
+    def __resize_faces(bm, faces, side_tangent, scale_factor):
         verts_to_translate_side_neg = set()
         verts_to_translate_side_pos = set()
         translate_vector_pos = None
@@ -634,7 +642,8 @@ class TenonMortiseBuilder:
         return adjacent_face
 
     # Find vertices in haunch touching tenon face
-    def __find_haunch_adjacent_edge(self, adjacent_face, haunch_top):
+    @staticmethod
+    def __find_haunch_adjacent_edge(adjacent_face, haunch_top):
         adjacent_edge = None
         for edge in haunch_top.edges:
             # find edge in plane adjacent_face
@@ -643,12 +652,13 @@ class TenonMortiseBuilder:
             dist = distance_point_to_plane(median, adjacent_face.verts[0].co,
                                            adjacent_face.normal)
 
-            if abs(dist) < 0.00001:
+            if abs(dist) < ZERO_TOLERANCE:
                 adjacent_edge = edge
                 break
         return adjacent_edge
 
-    def __find_tenon_faces_on_the_longest_side(self, face_to_be_transformed,
+    @staticmethod
+    def __find_tenon_faces_on_the_longest_side(face_to_be_transformed,
                                                tenon_top):
         longest_side_tangent = \
             face_to_be_transformed.longest_side_tangent.copy()
@@ -661,7 +671,8 @@ class TenonMortiseBuilder:
                         break
         return found
 
-    def __find_haunch_faces_on_the_longest_side(self, face_to_be_transformed,
+    @staticmethod
+    def __find_haunch_faces_on_the_longest_side(face_to_be_transformed,
                                                 haunch_top):
         longest_side_tangent = \
             face_to_be_transformed.longest_side_tangent.copy()
@@ -690,8 +701,9 @@ class TenonMortiseBuilder:
                                           geometry_retriever_type)
 
         # 2. Find vertices in haunch touching tenon face
-        adjacent_edge = self.__find_haunch_adjacent_edge(adjacent_face,
-                                                         haunch_top)
+        adjacent_edge = TenonMortiseBuilder.__find_haunch_adjacent_edge(
+            adjacent_face,
+            haunch_top)
         self.geometry_retriever.save_edge(adjacent_edge,
                                           ReferenceGeometry.haunchAdjacentEdge)
 
@@ -733,7 +745,7 @@ class TenonMortiseBuilder:
             new_vert = connection['new_vert']
             verts_to_merge.append(new_vert)
 
-        bmesh.ops.automerge(bm, verts=verts_to_merge, dist=0.00001)
+        bmesh.ops.automerge(bm, verts=verts_to_merge, dist=ZERO_TOLERANCE)
 
         # Geometry has changed from now on so all old references may be wrong
         #  (adjacent_edge, adjacent_face ...)
@@ -772,11 +784,12 @@ class TenonMortiseBuilder:
         bm.faces.new(face_vertices, tenon_top)
 
         # 9. Dissolve faces on tenon sides
-        faces_to_dissolve = self.__find_tenon_faces_on_the_longest_side(
-            face_to_be_transformed, tenon_top)
+        faces_to_dissolve = \
+            TenonMortiseBuilder.__find_tenon_faces_on_the_longest_side(
+                face_to_be_transformed, tenon_top)
         faces_to_dissolve.extend(
-            self.__find_haunch_faces_on_the_longest_side(face_to_be_transformed,
-                                                         haunch_top))
+            TenonMortiseBuilder.__find_haunch_faces_on_the_longest_side(
+                face_to_be_transformed, haunch_top))
         bmesh.ops.dissolve_faces(bm, faces=faces_to_dissolve)
 
     def __raise_haunched_tenon_side(self, bm, matrix_world,
@@ -790,7 +803,7 @@ class TenonMortiseBuilder:
                 shoulder.face,
                 side_tangent)
         else:
-            haunch_top = self.__set_face_depth(
+            haunch_top = TenonMortiseBuilder.__set_face_depth(
                 haunch_properties.depth_value,
                 bm,
                 matrix_world,
@@ -815,10 +828,11 @@ class TenonMortiseBuilder:
         self.geometry_retriever.save_face(second_shoulder.face,
                                           ReferenceGeometry.secondShoulder)
 
-        tenon_top = self.__set_face_depth(builder_properties.depth_value,
-                                          bm,
-                                          matrix_world,
-                                          tenon.face)
+        tenon_top = TenonMortiseBuilder.__set_face_depth(
+            builder_properties.depth_value,
+            bm,
+            matrix_world,
+            tenon.face)
 
         # extrude used by __set_face_depth could reorder faces (destructive op)
         # so retrieve saved faces
@@ -850,10 +864,10 @@ class TenonMortiseBuilder:
     # Raise a not haunched tenon
     def __raise_simple_tenon(self, bm, matrix_world, tenon):
         depth = self.builder_properties.depth_value
-        extruded_face = self.__set_face_depth(depth,
-                                              bm,
-                                              matrix_world,
-                                              tenon.face)
+        extruded_face = TenonMortiseBuilder.__set_face_depth(depth,
+                                                             bm,
+                                                             matrix_world,
+                                                             tenon.face)
 
         bpy.ops.mesh.select_all(action="DESELECT")
         extruded_face.select = True
@@ -963,26 +977,26 @@ class TenonMortiseBuilder:
 
         # Set tenon thickness
         if thickness_properties.type != "max":
-            scale_factor = tenon.get_scale_factor(
+            scale_factor = TenonFace.get_scale_factor(
                 tenon.thickness_reference_edge,
                 matrix_world,
                 thickness_properties.value)
 
             if thickness_properties.centered:
                 # centered
-                self.__resize_faces(
+                TenonMortiseBuilder.__resize_faces(
                     bm,
                     tenon.thickness_faces,
                     face_to_be_transformed.longest_side_tangent,
                     scale_factor)
             else:
                 # shouldered
-                verts_to_translate = tenon.find_verts_to_translate(
+                verts_to_translate = TenonFace.find_verts_to_translate(
                     tenon.thickness_faces,
                     thickness_shoulder_verts_to_translate)
 
                 translate_vector = \
-                    tenon.compute_translation_vector_given_shoulder(
+                    TenonFace.compute_translation_vector_given_shoulder(
                         tenon.thickness_reference_edge,
                         thickness_shoulder,
                         scale_factor,
@@ -995,26 +1009,26 @@ class TenonMortiseBuilder:
 
         # Set tenon height
         if height_properties.type != "max":
-            scale_factor = tenon.get_scale_factor(
+            scale_factor = TenonFace.get_scale_factor(
                 tenon.height_reference_edge,
                 matrix_world,
                 height_properties.value)
 
             if height_properties.centered:
                 # centered
-                self.__resize_faces(
+                TenonMortiseBuilder.__resize_faces(
                     bm,
                     tenon.height_faces,
                     face_to_be_transformed.shortest_side_tangent,
                     scale_factor)
             else:
                 # shouldered
-                verts_to_translate = tenon.find_verts_to_translate(
+                verts_to_translate = TenonFace.find_verts_to_translate(
                     tenon.height_faces,
                     height_shoulder_verts_to_translate)
 
                 translate_vector = \
-                    tenon.compute_translation_vector_given_shoulder(
+                    TenonFace.compute_translation_vector_given_shoulder(
                         tenon.height_reference_edge,
                         height_shoulder,
                         scale_factor,
