@@ -69,6 +69,8 @@ The tenon panel is organized in three parts :
 
 ### Description
 This operator will generate a new mortise on the selected quad face in edit mode.
+Haunched mortise make holes in adjacent faces.
+![Haunched mortise](/screenshots/sample_mortise_with_haunch.png)
 
 ### Requirements
 Object should be in edit mode, a **quad** face should be selected and it must be planar and _rectangular_.

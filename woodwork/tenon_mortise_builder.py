@@ -1,7 +1,8 @@
 import bmesh
 import bpy
 from mathutils.geometry import (intersect_point_line,
-                                distance_point_to_plane)
+                                distance_point_to_plane,
+                                intersect_line_plane)
 from math import pi
 from sys import float_info
 from collections import namedtuple
@@ -13,13 +14,12 @@ ZERO_TOLERANCE = 0.00001
 
 # Used to retrieve faces when geometry has been deleted and faces reordered
 class ReferenceGeometry(IntEnum):
-    faceToBeTransformed = 1
-    firstShoulder = 2
-    secondShoulder = 3
-    extruded = 4
-    tenonHaunchAdjacentFace = 5
-    edgeToRaise = 6
-    haunchAdjacentEdge = 7
+    firstShoulder = 1
+    secondShoulder = 2
+    extruded = 3
+    tenonHaunchAdjacentFace = 4
+    edgeToRaise = 5
+    haunchAdjacentEdge = 6
 
 
 # Use bmesh layers to retrieve faces
@@ -93,22 +93,6 @@ def distance_point_edge(pt, edge):
     return distance_vector.length
 
 
-def vector_abs(vector):
-    vector = vector.copy()
-    for i in range(len(vector)):
-        if vector[i] < 0.0:
-            vector[i] = abs(vector[i])
-    return vector
-
-
-def constraint_axis_from_tangent(tangent):
-    if tangent[0] == -1.0 or tangent[0] == 1:
-        return True, False, False
-    elif tangent[1] == -1.0 or tangent[1] == 1:
-        return False, True, False
-    return False, False, True
-
-
 class TenonMortiseBuilderThickness:
     pass
 
@@ -135,6 +119,7 @@ class FaceToBeTransformed:
         self.face = face
 
         self.median = None
+        self.normal = None
         self.longest_side_tangent = None
         self.shortest_side_tangent = None
         self.longest_edges = None
@@ -145,8 +130,8 @@ class FaceToBeTransformed:
     def extract_features(self, matrix_world):
         face = self.face
 
-        # Get center
         self.median = face.calc_center_median()
+        self.normal = face.normal
 
         # Get largest and smallest edge to find resize axes
         l0 = face.loops[0]
@@ -571,7 +556,7 @@ class TenonMortiseBuilder:
 
     # resize centered faces
     @staticmethod
-    def __resize_faces(bm, faces, side_tangent, scale_factor):
+    def __resize_faces(bm, faces, direction, scale_factor):
         verts_to_translate_side_neg = set()
         verts_to_translate_side_pos = set()
         translate_vector_pos = None
@@ -581,11 +566,11 @@ class TenonMortiseBuilder:
                 v0 = edge.verts[0]
                 v1 = edge.verts[1]
                 edge_vector = v1.co - v0.co
-                if same_direction(edge_vector, side_tangent):
+                if same_direction(edge_vector, direction):
 
                     center = (v1.co + v0.co) * 0.5
                     signed_distance = distance_point_to_plane(v0.co, center,
-                                                              side_tangent)
+                                                              direction)
                     if signed_distance < 0.0:
                         verts_to_translate_side_neg.add(v0)
                         verts_to_translate_side_pos.add(v1)
@@ -792,6 +777,79 @@ class TenonMortiseBuilder:
                 face_to_be_transformed, haunch_top))
         bmesh.ops.dissolve_faces(bm, faces=faces_to_dissolve)
 
+    # Find hole face
+    def __find_haunch_external_face(self,
+                                    face_to_be_transformed,
+                                    haunch_top,
+                                    side_tangent):
+        hole_face = None
+        for edge in haunch_top.edges:
+            for face in edge.link_faces:
+                if face is not haunch_top:
+                        angle = side_tangent.angle(face.normal)
+                        if nearly_equal(angle, 0.0):
+                            hole_face = face
+                            break
+            if hole_face is not None:
+                break
+        return hole_face
+
+    def __make_mortise_haunch_hole_on_side_face(self,
+                                                bm,
+                                                face_to_be_transformed,
+                                                haunch_top,
+                                                side_tangent):
+        # This is the face to transform to an hole
+        hole_face = self.__find_haunch_external_face(face_to_be_transformed, haunch_top, side_tangent)
+
+        # Get top edge
+        top_edge_to_dissolve = None
+        for edge in hole_face.edges:
+            v0 = edge.verts[0]
+            v1 = edge.verts[1]
+            center = (v1.co + v0.co) * 0.5
+            distance = distance_point_to_plane(center, face_to_be_transformed.median,
+                                               face_to_be_transformed.normal)
+            if abs(distance) < ZERO_TOLERANCE:
+                top_edge_to_dissolve = edge
+                break
+
+
+        # keep adjacent face flat projecting bottom edge on it
+        linked_faces = top_edge_to_dissolve.link_faces
+        if len(linked_faces) == 2:
+            adjacent_face = None
+            for face in linked_faces:
+                if face is not hole_face:
+                    adjacent_face = face
+                    break
+
+            plane_co = adjacent_face.verts[0].co
+            adjacent_normal = adjacent_face.normal
+
+            for loop in haunch_top.loops:
+                edge = loop.edge
+                tangent = edge.calc_tangent(loop)
+                if not same_direction(tangent, side_tangent):
+                    v0 = loop.vert
+                    v1 = loop.link_loop_next.vert
+
+                    intersection_pt = intersect_line_plane(v0.co, v1.co, plane_co, adjacent_normal)
+                    v0_distance = abs(distance_point_to_plane(v0.co, plane_co, adjacent_normal))
+                    v1_distance = abs(distance_point_to_plane(v1.co, plane_co, adjacent_normal))
+                    if v0_distance < v1_distance:
+                        origin_pt = v0
+                    else:
+                        origin_pt = v1
+                    translate_vec = intersection_pt - origin_pt.co
+
+                    bmesh.ops.translate(bm,
+                                        verts = [origin_pt],
+                                        vec = translate_vec)
+            # dissolve top edge
+            bmesh.ops.dissolve_edges(bm, edges = [top_edge_to_dissolve])
+
+
     def __raise_haunched_tenon_side(self, bm, matrix_world,
                                     face_to_be_transformed, tenon_top,
                                     side_tangent, shoulder, haunch_properties):
@@ -808,6 +866,9 @@ class TenonMortiseBuilder:
                 bm,
                 matrix_world,
                 shoulder.face)
+
+            if haunch_properties.depth_value < 0.0:
+                self.__make_mortise_haunch_hole_on_side_face(bm, face_to_be_transformed, haunch_top, side_tangent)
 
         self.__beautify_haunched_tenon(bm, face_to_be_transformed, tenon_top,
                                        haunch_top, side_tangent)
