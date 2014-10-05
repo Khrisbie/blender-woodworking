@@ -69,15 +69,28 @@ class TenonOperator(bpy.types.Operator):
             return False
         return True
 
-    def __draw_thickness_properties(self, layout, thickness_properties):
+    @staticmethod
+    def __draw_percentage(layout, data, percentage_property, value_property):
+        split = layout.split()
+
+        col = split.column()
+        col.prop(data, percentage_property, text="", slider=True)
+
+        col = split.column()
+        col.enabled = False
+        col.prop(data, value_property, text="")
+
+    @staticmethod
+    def __draw_thickness_properties(layout, thickness_properties):
         width_side_box = layout.box()
         width_side_box.label(text="Thickness type")
         width_side_box.prop(thickness_properties, "type", text="")
         if thickness_properties.type == "value":
             width_side_box.prop(thickness_properties, "value", text="")
         elif thickness_properties.type == "percentage":
-            width_side_box.prop(thickness_properties, "percentage", text="",
-                                slider=True)
+            TenonOperator.__draw_percentage(width_side_box,
+                                            thickness_properties,
+                                            "percentage", "value")
         width_side_box.label(text="Position")
         width_side_box.prop(thickness_properties, "centered")
         if not thickness_properties.centered:
@@ -88,12 +101,14 @@ class TenonOperator(bpy.types.Operator):
                 width_side_box.prop(thickness_properties, "shoulder_value",
                                     text="")
             elif thickness_properties.shoulder_type == "percentage":
-                width_side_box.prop(thickness_properties,
-                                    "shoulder_percentage", text="",
-                                    slider=True)
+                TenonOperator.__draw_percentage(width_side_box,
+                                                thickness_properties,
+                                                "shoulder_percentage",
+                                                "shoulder_value")
             width_side_box.prop(thickness_properties, "reverse_shoulder")
 
-    def __draw_haunch_properties(self, layout, haunch_properties):
+    @staticmethod
+    def __draw_haunch_properties(layout, haunch_properties):
         layout.label(text="Haunch depth type")
         layout.prop(haunch_properties, "type",
                     text="")
@@ -101,21 +116,23 @@ class TenonOperator(bpy.types.Operator):
             layout.prop(haunch_properties,
                         "depth_value", text="")
         elif haunch_properties.type == "percentage":
-            layout.prop(haunch_properties,
-                        "depth_percentage", text="",
-                        slider=True)
+            TenonOperator.__draw_percentage(layout, haunch_properties,
+                                            "depth_percentage", "depth_value")
+
         layout.label(text="Haunch angle")
         layout.prop(haunch_properties, "angle", text="")
 
-    def __draw_height_properties(self, layout, height_properties):
+    @staticmethod
+    def __draw_height_properties(layout, height_properties):
         length_side_box = layout.box()
         length_side_box.label(text="Height type")
         length_side_box.prop(height_properties, "type", text="")
         if height_properties.type == "value":
             length_side_box.prop(height_properties, "value", text="")
         elif height_properties.type == "percentage":
-            length_side_box.prop(height_properties, "percentage", text="",
-                                 slider=True)
+            TenonOperator.__draw_percentage(length_side_box, height_properties,
+                                            "percentage", "value")
+
         length_side_box.label(text="Position")
         length_side_box.prop(height_properties, "centered")
         if not height_properties.centered:
@@ -126,20 +143,22 @@ class TenonOperator(bpy.types.Operator):
                 length_side_box.prop(height_properties, "shoulder_value",
                                      text="")
             elif height_properties.shoulder_type == "percentage":
-                length_side_box.prop(height_properties,
-                                     "shoulder_percentage",
-                                     text="", slider=True)
+                TenonOperator.__draw_percentage(length_side_box,
+                                                height_properties,
+                                                "shoulder_percentage",
+                                                "shoulder_value")
+
             length_side_box.prop(height_properties, "reverse_shoulder")
             length_side_box.prop(height_properties, "haunched_first_side")
             if height_properties.haunched_first_side:
                 haunch_properties = height_properties.haunch_first_side
-                self.__draw_haunch_properties(length_side_box,
-                                              haunch_properties)
+                TenonOperator.__draw_haunch_properties(length_side_box,
+                                                       haunch_properties)
             length_side_box.prop(height_properties, "haunched_second_side")
             if height_properties.haunched_second_side:
                 haunch_properties = height_properties.haunch_second_side
-                self.__draw_haunch_properties(length_side_box,
-                                              haunch_properties)
+                TenonOperator.__draw_haunch_properties(length_side_box,
+                                                       haunch_properties)
 
     # Custom layout
     def draw(self, context):
@@ -159,7 +178,8 @@ class TenonOperator(bpy.types.Operator):
             row.prop(self, "expand_thickness_properties", icon="TRIA_DOWN",
                      icon_only=True, text="Width side",
                      emboss=False)
-            self.__draw_thickness_properties(layout, thickness_properties)
+            TenonOperator.__draw_thickness_properties(layout,
+                                                      thickness_properties)
 
         row = layout.row(align=True)
         row.alignment = 'EXPAND'
@@ -171,7 +191,7 @@ class TenonOperator(bpy.types.Operator):
             row.prop(self, "expand_height_properties", icon="TRIA_DOWN",
                      icon_only=True, text="Length side",
                      emboss=False)
-            self.__draw_height_properties(layout, height_properties)
+            TenonOperator.__draw_height_properties(layout, height_properties)
 
         layout.label(text="Depth")
         layout.prop(tenon_properties, "depth_value", text="")
@@ -366,4 +386,3 @@ def unregister():
 # ----------------------------------------------
 if __name__ == "__main__":
     register()
-
