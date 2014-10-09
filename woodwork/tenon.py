@@ -81,6 +81,20 @@ class TenonOperator(bpy.types.Operator):
         col.prop(data, value_property, text="")
 
     @staticmethod
+    def __draw_haunch_properties(layout, haunch_properties):
+        box = layout.box()
+        box.label(text="Haunch depth type")
+        box.prop(haunch_properties, "type", text="")
+        if haunch_properties.type == "value":
+            box.prop(haunch_properties, "depth_value", text="")
+        elif haunch_properties.type == "percentage":
+            TenonOperator.__draw_percentage(box, haunch_properties,
+                                            "depth_percentage", "depth_value")
+
+        box.label(text="Haunch angle")
+        box.prop(haunch_properties, "angle", text="")
+
+    @staticmethod
     def __draw_thickness_properties(layout, thickness_properties):
         width_side_box = layout.box()
         width_side_box.label(text="Thickness type")
@@ -106,21 +120,16 @@ class TenonOperator(bpy.types.Operator):
                                                 "shoulder_percentage",
                                                 "shoulder_value")
             width_side_box.prop(thickness_properties, "reverse_shoulder")
-
-    @staticmethod
-    def __draw_haunch_properties(layout, haunch_properties):
-        layout.label(text="Haunch depth type")
-        layout.prop(haunch_properties, "type",
-                    text="")
-        if haunch_properties.type == "value":
-            layout.prop(haunch_properties,
-                        "depth_value", text="")
-        elif haunch_properties.type == "percentage":
-            TenonOperator.__draw_percentage(layout, haunch_properties,
-                                            "depth_percentage", "depth_value")
-
-        layout.label(text="Haunch angle")
-        layout.prop(haunch_properties, "angle", text="")
+            width_side_box.prop(thickness_properties, "haunched_first_side")
+            if thickness_properties.haunched_first_side:
+                haunch_properties = thickness_properties.haunch_first_side
+                TenonOperator.__draw_haunch_properties(width_side_box,
+                                                       haunch_properties)
+            width_side_box.prop(thickness_properties, "haunched_second_side")
+            if thickness_properties.haunched_second_side:
+                haunch_properties = thickness_properties.haunch_second_side
+                TenonOperator.__draw_haunch_properties(width_side_box,
+                                                       haunch_properties)
 
     @staticmethod
     def __draw_height_properties(layout, height_properties):
@@ -253,11 +262,21 @@ class TenonOperator(bpy.types.Operator):
                                   self.longest_length))):
             tenon_properties.depth_value = \
                 face_to_be_transformed.shortest_length
+
             haunch_properties = height_properties.haunch_first_side
             haunch_properties.depth_value = \
                 tenon_properties.depth_value / 3.0
             haunch_properties.depth_percentage = 1.0 / 3.0
             haunch_properties = height_properties.haunch_second_side
+            haunch_properties.depth_value = \
+                tenon_properties.depth_value / 3.0
+            haunch_properties.depth_percentage = 1.0 / 3.0
+
+            haunch_properties = thickness_properties.haunch_first_side
+            haunch_properties.depth_value = \
+                tenon_properties.depth_value / 3.0
+            haunch_properties.depth_percentage = 1.0 / 3.0
+            haunch_properties = thickness_properties.haunch_second_side
             haunch_properties.depth_value = \
                 tenon_properties.depth_value / 3.0
             haunch_properties.depth_percentage = 1.0 / 3.0
@@ -320,7 +339,7 @@ class TenonOperator(bpy.types.Operator):
                     height_properties.value / \
                     face_to_be_transformed.longest_length
 
-        if height_properties.haunch_first_side:
+        if height_properties.haunched_first_side:
             haunch_properties = height_properties.haunch_first_side
             if haunch_properties.type == "percentage":
                 haunch_properties.depth_value = \
@@ -329,6 +348,20 @@ class TenonOperator(bpy.types.Operator):
 
         if height_properties.haunched_second_side:
             haunch_properties = height_properties.haunch_second_side
+            if haunch_properties.type == "percentage":
+                haunch_properties.depth_value = \
+                    tenon_properties.depth_value * \
+                    haunch_properties.depth_percentage
+
+        if thickness_properties.haunched_first_side:
+            haunch_properties = thickness_properties.haunch_first_side
+            if haunch_properties.type == "percentage":
+                haunch_properties.depth_value = \
+                    tenon_properties.depth_value * \
+                    haunch_properties.depth_percentage
+
+        if thickness_properties.haunched_second_side:
+            haunch_properties = thickness_properties.haunch_second_side
             if haunch_properties.type == "percentage":
                 haunch_properties.depth_value = \
                     tenon_properties.depth_value * \

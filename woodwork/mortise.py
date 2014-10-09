@@ -62,6 +62,20 @@ class MortiseOperator(bpy.types.Operator):
         col.prop(data, value_property, text="")
 
     @staticmethod
+    def __draw_haunch_properties(layout, haunch_properties):
+        box = layout.box()
+        box.label(text="Haunch depth type")
+        box.prop(haunch_properties, "type", text="")
+        if haunch_properties.type == "value":
+            box.prop(haunch_properties, "depth_value", text="")
+        elif haunch_properties.type == "percentage":
+            MortiseOperator.__draw_percentage(box, haunch_properties,
+                                              "depth_percentage", "depth_value")
+
+        box.label(text="Haunch angle")
+        box.prop(haunch_properties, "angle", text="")
+
+    @staticmethod
     def __draw_thickness_properties(layout, thickness_properties):
         width_side_box = layout.box()
         width_side_box.label(text="Thickness type")
@@ -89,21 +103,16 @@ class MortiseOperator(bpy.types.Operator):
                                                   "shoulder_value")
 
             width_side_box.prop(thickness_properties, "reverse_shoulder")
-
-    @staticmethod
-    def __draw_haunch_properties(layout, haunch_properties):
-        layout.label(text="Haunch depth type")
-        layout.prop(haunch_properties, "type",
-                    text="")
-        if haunch_properties.type == "value":
-            layout.prop(haunch_properties,
-                        "depth_value", text="")
-        elif haunch_properties.type == "percentage":
-            MortiseOperator.__draw_percentage(layout, haunch_properties,
-                                              "depth_percentage", "depth_value")
-
-        layout.label(text="Haunch angle")
-        layout.prop(haunch_properties, "angle", text="")
+            width_side_box.prop(thickness_properties, "haunched_first_side")
+            if thickness_properties.haunched_first_side:
+                haunch_properties = thickness_properties.haunch_first_side
+                MortiseOperator.__draw_haunch_properties(width_side_box,
+                                                         haunch_properties)
+            width_side_box.prop(thickness_properties, "haunched_second_side")
+            if thickness_properties.haunched_second_side:
+                haunch_properties = thickness_properties.haunch_second_side
+                MortiseOperator.__draw_haunch_properties(width_side_box,
+                                                         haunch_properties)
 
     @staticmethod
     def __draw_height_properties(layout, height_properties):
@@ -193,6 +202,7 @@ class MortiseOperator(bpy.types.Operator):
         builder_properties = TenonMortiseBuilderProps()
         builder_properties.depth_value = -mortise_properties.depth_value
 
+        # thickness
         builder_thickness_properties = builder_properties.thickness_properties
         mortise_thickness_properties = mortise_properties.thickness_properties
 
@@ -210,7 +220,36 @@ class MortiseOperator(bpy.types.Operator):
             mortise_thickness_properties.shoulder_percentage
         builder_thickness_properties.reverse_shoulder = \
             mortise_thickness_properties.reverse_shoulder
+        builder_thickness_properties.haunched_first_side = \
+            mortise_thickness_properties.haunched_first_side
+        builder_thickness_properties.haunched_second_side = \
+            mortise_thickness_properties.haunched_second_side
 
+        builder_haunch_properties = \
+            builder_thickness_properties.haunch_first_side
+        mortise_haunch_properties = \
+            mortise_thickness_properties.haunch_first_side
+
+        builder_haunch_properties.type = mortise_haunch_properties.type
+        builder_haunch_properties.depth_value = \
+            -mortise_haunch_properties.depth_value
+        builder_haunch_properties.depth_percentage = \
+            mortise_haunch_properties.depth_percentage
+        builder_haunch_properties.angle = mortise_haunch_properties.angle
+
+        builder_haunch_properties = \
+            builder_thickness_properties.haunch_second_side
+        mortise_haunch_properties = \
+            mortise_thickness_properties.haunch_second_side
+
+        builder_haunch_properties.type = mortise_haunch_properties.type
+        builder_haunch_properties.depth_value = \
+            -mortise_haunch_properties.depth_value
+        builder_haunch_properties.depth_percentage = \
+            mortise_haunch_properties.depth_percentage
+        builder_haunch_properties.angle = mortise_haunch_properties.angle
+
+        # height
         builder_height_properties = builder_properties.height_properties
         mortise_height_properties = mortise_properties.height_properties
 
@@ -305,11 +344,21 @@ class MortiseOperator(bpy.types.Operator):
                                   self.longest_length))):
             mortise_properties.depth_value = \
                 face_to_be_transformed.shortest_length
+
             haunch_properties = height_properties.haunch_first_side
             haunch_properties.depth_value = \
                 mortise_properties.depth_value / 3.0
             haunch_properties.depth_percentage = 1.0 / 3.0
             haunch_properties = height_properties.haunch_second_side
+            haunch_properties.depth_value = \
+                mortise_properties.depth_value / 3.0
+            haunch_properties.depth_percentage = 1.0 / 3.0
+
+            haunch_properties = thickness_properties.haunch_first_side
+            haunch_properties.depth_value = \
+                mortise_properties.depth_value / 3.0
+            haunch_properties.depth_percentage = 1.0 / 3.0
+            haunch_properties = thickness_properties.haunch_second_side
             haunch_properties.depth_value = \
                 mortise_properties.depth_value / 3.0
             haunch_properties.depth_percentage = 1.0 / 3.0
@@ -372,7 +421,7 @@ class MortiseOperator(bpy.types.Operator):
                     height_properties.value / \
                     face_to_be_transformed.longest_length
 
-        if height_properties.haunch_first_side:
+        if height_properties.haunched_first_side:
             haunch_properties = height_properties.haunch_first_side
             if haunch_properties.type == "percentage":
                 haunch_properties.depth_value = \
@@ -381,6 +430,20 @@ class MortiseOperator(bpy.types.Operator):
 
         if height_properties.haunched_second_side:
             haunch_properties = height_properties.haunch_second_side
+            if haunch_properties.type == "percentage":
+                haunch_properties.depth_value = \
+                    mortise_properties.depth_value * \
+                    haunch_properties.depth_percentage
+
+        if thickness_properties.haunched_first_side:
+            haunch_properties = thickness_properties.haunch_first_side
+            if haunch_properties.type == "percentage":
+                haunch_properties.depth_value = \
+                    mortise_properties.depth_value * \
+                    haunch_properties.depth_percentage
+
+        if thickness_properties.haunched_second_side:
+            haunch_properties = thickness_properties.haunch_second_side
             if haunch_properties.type == "percentage":
                 haunch_properties.depth_value = \
                     mortise_properties.depth_value * \
