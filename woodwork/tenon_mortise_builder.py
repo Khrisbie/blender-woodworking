@@ -1,12 +1,17 @@
-import bmesh
-import bpy
-from mathutils.geometry import (intersect_point_line,
-                                distance_point_to_plane,
-                                intersect_line_plane)
 from math import pi
 from sys import float_info
 from collections import namedtuple
-from enum import IntEnum, unique
+
+import bmesh
+import bpy
+from mathutils import Vector
+from mathutils.geometry import (intersect_point_line,
+                                distance_point_to_plane,
+                                intersect_line_plane,
+                                tessellate_polygon,
+                                normal,
+                                intersect_ray_tri)
+from enum import Enum, IntEnum, unique
 
 
 ZERO_TOLERANCE = 0.00001
@@ -23,6 +28,13 @@ class ReferenceGeometry(IntEnum):
     tenonHaunchAdjacentFace = 6
     edgeToRaise = 7
     haunchAdjacentEdge = 8
+
+
+class Position(Enum):
+    in_front = 1
+    behind = 2
+    on_plane = 3
+    intersecting = 4
 
 
 # Use bmesh layers to retrieve faces
@@ -68,17 +80,52 @@ class GeometryRetriever:
         self.bm.edges.layers.int.remove(self.edge_retriever)
 
 
-def nearly_equal(a, b, epsilon=ZERO_TOLERANCE):
-    abs_a = abs(a)
-    abs_b = abs(b)
-    diff = abs(a - b)
-
+# See http://randomascii.wordpress.com/2012/02/25/
+# comparing-floating-point-numbers-2012-edition/
+# - If you are comparing against zero, then relative epsilons and ULPs based
+#   comparisons are usually meaningless. You’ll need to use an absolute
+#   epsilon, whose value might be some small multiple of FLT_EPSILON and the
+#   inputs to your calculation. Maybe.
+# - If you are comparing against a non-zero number then relative epsilons or
+#   ULPs based comparisons are probably what you want. You’ll probably want
+#   some small multiple of FLT_EPSILON for your relative epsilon, or some small
+#   number of ULPs. An absolute epsilon could be used if you knew exactly what
+#   number you were comparing against.
+# - If you are comparing two arbitrary numbers that could be zero or non-zero
+#   then you need the kitchen sink. Good luck and God speed.
+def almost_equal_relative_or_absolute(a,
+                                      b,
+                                      max_relative_error=1.e-5,
+                                      max_absolute_error=1.e-8):
+    almost_equal = False
     if a == b:
-        return True
-    elif a == 0.0 or b == 0.0 or diff < float_info.min:
-        return diff < (epsilon * float_info.min)
+        almost_equal = True
     else:
-        return diff / (abs_a + abs_b) < epsilon
+        #  Check if the numbers are really close
+        # -- needed when comparing numbers near zero.
+        abs_diff = abs(a - b)
+
+        if abs_diff <= max_absolute_error:
+            almost_equal = True
+        else:
+            abs_a = abs(a)
+            abs_b = abs(b)
+
+            if abs_b > abs_a:
+                largest = abs_b
+            else:
+                largest = abs_a
+
+            if abs_diff <= largest * max_relative_error:
+                almost_equal = True
+
+    return almost_equal
+
+
+def almost_zero(a):
+    return almost_equal_relative_or_absolute(a,
+                                             0.0,
+                                             max_absolute_error=ZERO_TOLERANCE)
 
 
 def same_direction(vector0, vector1):
@@ -86,7 +133,8 @@ def same_direction(vector0, vector1):
     dir2 = vector1.normalized()
     d = dir1.dot(dir2)
 
-    return nearly_equal(d, 1.0) or nearly_equal(d, -1.0)
+    return almost_equal_relative_or_absolute(d, 1.0) or \
+           almost_equal_relative_or_absolute(d, -1.0)
 
 
 def distance_point_edge(pt, edge):
@@ -449,6 +497,305 @@ class ShoulderFace:
         return final_vector - edge_vector
 
 
+class BBox:
+    def __init__(self, min_values: Vector, max_values: Vector):
+        self.min = min_values
+        self.max = max_values
+
+    def __repr__(self):
+        return "<{}({}), min={}, max={}>".format(self.__class__.__name__,
+                                                 hex(id(self)), self.min,
+                                                 self.max)
+
+    @staticmethod
+    def from_face(face):
+        min_values = Vector((float_info.max, float_info.max, float_info.max))
+        max_values = Vector((float_info.min, float_info.min, float_info.min))
+        for v in face.verts:
+            co = v.co
+            for i, axe_co in enumerate(co):
+                min_values[i] = min(min_values[i], axe_co)
+                max_values[i] = max(max_values[i], axe_co)
+        return BBox(min_values, max_values)
+
+    @staticmethod
+    def from_faces(faces):
+        min_values = Vector((float_info.max, float_info.max, float_info.max))
+        max_values = Vector((float_info.min, float_info.min, float_info.min))
+        for face in faces:
+            for v in face.verts:
+                co = v.co
+                for i, axe_co in enumerate(co):
+                    min_values[i] = min(min_values[i], axe_co)
+                    max_values[i] = max(max_values[i], axe_co)
+        return BBox(min_values, max_values)
+
+    def intersect(self, bbox):
+        possible_intersection = True
+        for axe_index in range(0, 3):
+            if self.min[axe_index] > bbox.max[axe_index]:
+                possible_intersection = False
+                break
+            if self.max[axe_index] < bbox.min[axe_index]:
+                possible_intersection = False
+                break
+
+        return possible_intersection
+
+    def point_inside(self, point):
+        point_inside = True
+        for axe_index in range(0, 3):
+            if point[axe_index] < self.min[axe_index] or \
+               point[axe_index] > self.max[axe_index]:
+                point_inside = False
+                break
+        return point_inside
+
+    def face_inside(self, face):
+        face_inside = True
+        for vert in face.verts:
+            if not self.point_inside(vert.co):
+                face_inside = False
+                break
+        return face_inside
+
+    def inside_faces(self, faces):
+        inside_faces = []
+        for face in faces:
+            if self.face_inside(face):
+                inside_faces.append(face)
+        return inside_faces
+
+    def center(self):
+        return (self.min + self.max) * 0.5
+
+
+class ThroughMortiseIntersection:
+
+    def __init__(self, bm, top_face):
+        self.bm = bm
+        self.top_face = top_face
+
+    # returns the position of a face against a plane
+    @staticmethod
+    def __face_position(face, plane_co, plane_no) -> Position:
+        positions = set()
+        # plane equation with normal vector plane_no = (a, b, c) through the
+        # point plane_co = (x0, y0, z0) is
+        # a x + b y + c z + d = 0 where d = -a x0 -b y0 -c z0
+        d = -(plane_no * plane_co)
+        for vert in face.verts:
+
+            pseudo_distance = plane_no * vert.co + d
+
+            if almost_zero(pseudo_distance):
+                position = Position.on_plane
+            elif pseudo_distance > 0.0:
+                position = Position.in_front
+            else:
+                position = Position.behind
+
+            positions.add(position)
+        if len(positions) == 1:
+            face_position = next(iter(positions))
+        else:
+            face_position = Position.intersecting
+        return face_position
+
+    def __find_possible_intersection_triangles(self,
+                                               intersect_faces,
+                                               intersect_faces_bbox,
+                                               face_to_be_transformed):
+        tri_faces = []
+        TriFace = namedtuple('TriFace', 'orig_face, v0, v1, v2, normal')
+        for face in self.bm.faces:
+            if not (face in intersect_faces or face is self.top_face):
+                possible_intersection = False
+                # Check possible intersection with boundary boxes
+                for intersect_face_bbox in intersect_faces_bbox:
+                    face_bbox = BBox.from_face(face)
+                    if intersect_face_bbox.intersect(face_bbox):
+                        possible_intersection = True
+                        break
+
+                # TODO : check if face is a haunch
+
+                # Check if face is behind reference face
+                if possible_intersection:
+                    face_position = ThroughMortiseIntersection.__face_position(
+                        face,
+                        face_to_be_transformed.median,
+                        face_to_be_transformed.normal)
+                    if face_position is Position.in_front or \
+                            face_position is Position.on_plane:
+                        possible_intersection = False
+
+                if possible_intersection:
+                    if len(face.verts) > 3:
+                        co_list = [vert.co for vert in face.verts]
+                        tris = tessellate_polygon((co_list,))
+                        for tri in tris:
+                            v0 = co_list[tri[0]]
+                            v1 = co_list[tri[1]]
+                            v2 = co_list[tri[2]]
+                            tri_normal = normal(v0, v1, v2)
+
+                            tri_face = TriFace(face,
+                                               v0=v0,
+                                               v1=v1,
+                                               v2=v2,
+                                               normal=tri_normal)
+                            tri_faces.append(tri_face)
+                    else:
+                        verts = face.verts
+                        v0 = verts[0].co
+                        v1 = verts[1].co
+                        v2 = verts[2].co
+                        tri_face = TriFace(face,
+                                           v0=v0,
+                                           v1=v1,
+                                           v2=v2,
+                                           normal=face.normal)
+                        tri_faces.append(tri_face)
+        return tri_faces
+
+    @staticmethod
+    def __find_intersection_points(intersect_edges, tri_faces):
+        IntersectionPt = namedtuple('IntersectionPt',
+                                    'intersection_pt, tri, edge')
+        intersection_pts = []
+        for edge in intersect_edges:
+            for tri in tri_faces:
+                v1 = edge.verts[0].co
+                v2 = edge.verts[1].co
+                ray = v2 - v1
+                intersection_pt = intersect_ray_tri(tri.v0,
+                                                    tri.v1,
+                                                    tri.v2,
+                                                    ray,
+                                                    v1)
+                if intersection_pt is not None:
+                    intersection = IntersectionPt(intersection_pt, tri, edge)
+                    intersection_pts.append(intersection)
+        return intersection_pts
+
+    # faces are connected (they form a box) when at least two edges are
+    # connected with the others
+    @staticmethod
+    def __faces_are_box_connected(faces):
+        connected = True
+        if len(faces) > 4:
+            connected = False
+        elif len(faces) > 1:
+            for face in faces:
+                linked_count = 0
+                for edge in face.edges:
+                    linked_faces = edge.link_faces
+                    for linked_face in linked_faces:
+                        if linked_face is not face:
+                            if linked_face in faces:
+                                linked_count += 1
+                if linked_count < 2:
+                    connected = False
+                    break
+
+        return connected
+
+    @staticmethod
+    def __outer_edge_loop(faces):
+        outer_edges = set()
+        for face in faces:
+            for edge in face.edges:
+                link_faces = edge.link_faces
+                for link_face in link_faces:
+                    if not link_face in faces:
+                        outer_edges.add(edge)
+        return outer_edges
+
+    def __translate_top_face_to_intersection(self, intersection_pts):
+        for intersection in intersection_pts:
+            intersection_pt = intersection.intersection_pt
+            edge = intersection.edge
+            vert = edge.verts[0]
+            if not self.top_face in vert.link_faces:
+                vert = edge.verts[1]
+            translation_vector = intersection_pt - vert.co
+            bmesh.ops.translate(self.bm, vec=translation_vector, verts=[vert])
+
+    def __create_hole(self, intersection_pts):
+        # remove intersected faces
+        faces_to_delete = set()
+        for intersection in intersection_pts:
+            tri = intersection.tri
+            faces_to_delete.add(tri.orig_face)
+
+        # find external loop in faces to be deleted
+        if not ThroughMortiseIntersection.__faces_are_box_connected(
+                faces_to_delete):
+            # There are faces in between intersected faces
+            # Compute bounding box and select faces inside
+            faces_to_delete_bbox = BBox.from_faces(faces_to_delete)
+            inside_faces = faces_to_delete_bbox.inside_faces(self.bm.faces)
+            faces_to_delete.update(inside_faces)
+
+        edges_to_fill = ThroughMortiseIntersection.__outer_edge_loop(
+            faces_to_delete)
+
+        # delete top face too (now it's a hole)
+        faces_to_delete.add(self.top_face)
+        for edge in self.top_face.edges:
+            edges_to_fill.add(edge)
+
+        delete_faces = 5
+        bmesh.ops.delete(self.bm,
+                         geom=list(faces_to_delete),
+                         context=delete_faces)
+        bmesh.ops.bridge_loops(self.bm, edges=list(edges_to_fill))
+        #TODO: do a clean-up / limited dissolve
+
+    # Calculate edge intersection with opposite face
+    # Used for through mortise
+    def create_hole_in_opposite_faces(self, face_to_be_transformed):
+        # Get face perpendicular edges
+        top_face_normal = self.top_face.normal
+        intersect_edges = []
+        intersect_faces = set()
+        for vert in self.top_face.verts:
+            for edge in vert.link_edges:
+                edge_vect = edge.verts[0].co - edge.verts[1].co
+                if same_direction(edge_vect, top_face_normal):
+                    intersect_edges.append(edge)
+                    edge_faces = edge.link_faces
+                    for edge_face in edge_faces:
+                        intersect_faces.add(edge_face)
+
+        # Compute bounding box for faces
+        intersect_faces_bbox = []
+        for face in intersect_faces:
+            bbox = BBox.from_face(face)
+            intersect_faces_bbox.append(bbox)
+
+        # Map each original face index to one or more triangle if needed
+        tri_faces = self.__find_possible_intersection_triangles(
+            intersect_faces,
+            intersect_faces_bbox,
+            face_to_be_transformed)
+
+        # Try to intersect with triangles
+        intersection_pts = \
+            ThroughMortiseIntersection.__find_intersection_points(
+                intersect_edges,
+                tri_faces)
+
+        intersections_count = len(intersection_pts)
+        if intersections_count == 4:
+            self.__translate_top_face_to_intersection(intersection_pts)
+            self.__create_hole(intersection_pts)
+
+        elif intersections_count > 4:
+            print("Too many intersections for through mortise")
+
+
 class TenonMortiseBuilder:
     def __init__(self, face_to_be_transformed, builder_properties):
         self.face_to_be_transformed = face_to_be_transformed
@@ -500,9 +847,9 @@ class TenonMortiseBuilder:
             edge = loop.edge
             tangent = edge.calc_tangent(loop)
             angle = tangent.angle(still_edge_tangent)
-            if nearly_equal(angle, 0.0):
+            if almost_zero(angle):
                 still_edge = edge
-            elif nearly_equal(angle, pi):
+            elif almost_equal_relative_or_absolute(angle, pi):
                 edge_to_raise = edge
 
         for face in still_edge.link_faces:
@@ -529,7 +876,7 @@ class TenonMortiseBuilder:
             edge = loop.edge
             tangent = edge.calc_tangent(loop)
             angle = tangent.angle(still_edge_tangent)
-            if nearly_equal(angle, 0.0):
+            if almost_zero(angle):
                 # find edge not in extruded_face
                 for vert in edge.verts:
                     link_edges = vert.link_edges
@@ -626,7 +973,7 @@ class TenonMortiseBuilder:
                     if is_mortise:
                         normal.negate()
                     angle = side_tangent.angle(normal)
-                    if nearly_equal(angle, pi):
+                    if almost_equal_relative_or_absolute(angle, pi):
                         adjacent_face = face
                         break
             if adjacent_face is not None:
@@ -754,7 +1101,7 @@ class TenonMortiseBuilder:
                 if loop.face == tenon_top:
                     tangent = edge.calc_tangent(loop)
                     angle = tangent.angle(side_tangent)
-                    if nearly_equal(angle, 0):
+                    if almost_zero(angle):
                         face_vertices.append(edge.verts[0])
                         face_vertices.append(edge.verts[1])
                         break
@@ -782,7 +1129,7 @@ class TenonMortiseBuilder:
             for face in edge.link_faces:
                 if face is not haunch_top:
                         angle = side_tangent.angle(face.normal)
-                        if nearly_equal(angle, 0.0):
+                        if almost_zero(angle):
                             hole_face = face
                             break
             if hole_face is not None:
@@ -996,8 +1343,14 @@ class TenonMortiseBuilder:
                               second_thickness_shoulder, side_tangent,
                               thickness_properties, dissolve_faces)
 
-        bpy.ops.mesh.select_all(action="DESELECT")
-        tenon_top.select = True
+        if builder_properties.depth_value < 0.0:
+            through_mortise_hole_builder = ThroughMortiseIntersection(bm,
+                                                                      tenon_top)
+            through_mortise_hole_builder.create_hole_in_opposite_faces(
+                self.face_to_be_transformed)
+        else:
+            bpy.ops.mesh.select_all(action="DESELECT")
+            tenon_top.select = True
 
     # Raise a not haunched tenon
     def __raise_simple_tenon(self, bm, matrix_world, tenon):
@@ -1009,8 +1362,14 @@ class TenonMortiseBuilder:
             matrix_world,
             tenon.face)
 
-        bpy.ops.mesh.select_all(action="DESELECT")
-        tenon_top.select = True
+        if builder_properties.depth_value < 0.0:
+            through_mortise_hole_builder = ThroughMortiseIntersection(bm,
+                                                                      tenon_top)
+            through_mortise_hole_builder.create_hole_in_opposite_faces(
+                self.face_to_be_transformed)
+        else:
+            bpy.ops.mesh.select_all(action="DESELECT")
+            tenon_top.select = True
 
     def create(self, bm, matrix_world):
 

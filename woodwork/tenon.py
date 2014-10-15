@@ -5,7 +5,7 @@ from mathutils.geometry import distance_point_to_plane
 from math import pi
 from woodwork.tenon_mortise_builder import (TenonMortiseBuilder,
                                             FaceToBeTransformed,
-                                            nearly_equal)
+                                            almost_equal_relative_or_absolute)
 
 
 # is_face_planar
@@ -244,22 +244,25 @@ class TenonOperator(bpy.types.Operator):
 
         # Init default values, look if face has changed too
         if (thickness_properties.value == -1.0 or
-                (not nearly_equal(face_to_be_transformed.shortest_length,
-                                  self.shortest_length))):
+                (not almost_equal_relative_or_absolute(
+                    face_to_be_transformed.shortest_length,
+                    self.shortest_length))):
             thickness_properties.value = \
                 face_to_be_transformed.shortest_length / 3.0
             thickness_properties.percentage = 1.0 / 3.0
             thickness_properties.centered = True
         if (height_properties.value == -1.0 or
-                (not nearly_equal(face_to_be_transformed.longest_length,
-                                  self.longest_length))):
+                (not almost_equal_relative_or_absolute(
+                    face_to_be_transformed.longest_length,
+                    self.longest_length))):
             height_properties.value = (face_to_be_transformed.longest_length *
                                        2.0) / 3.0
             height_properties.percentage = 2.0 / 3.0
             height_properties.centered = True
         if (tenon_properties.depth_value == -1.0 or
-                (not nearly_equal(face_to_be_transformed.longest_length,
-                                  self.longest_length))):
+                (not almost_equal_relative_or_absolute(
+                    face_to_be_transformed.longest_length,
+                    self.longest_length))):
             tenon_properties.depth_value = \
                 face_to_be_transformed.shortest_length
 
@@ -370,8 +373,9 @@ class TenonOperator(bpy.types.Operator):
         # Check input values
         total_length = height_properties.shoulder_value + \
             height_properties.value
-        if ((not nearly_equal(total_length,
-                              face_to_be_transformed.longest_length)) and
+        if ((not almost_equal_relative_or_absolute(
+                total_length,
+                face_to_be_transformed.longest_length)) and
                 (total_length > face_to_be_transformed.longest_length)):
             self.report({'ERROR_INVALID_INPUT'},
                         "Size of length size shoulder and tenon height are "
@@ -380,8 +384,9 @@ class TenonOperator(bpy.types.Operator):
 
         total_length = thickness_properties.shoulder_value + \
             thickness_properties.value
-        if ((not nearly_equal(total_length,
-                              face_to_be_transformed.shortest_length)) and
+        if ((not almost_equal_relative_or_absolute(
+                total_length,
+                face_to_be_transformed.shortest_length)) and
                 (total_length > face_to_be_transformed.shortest_length)):
             self.report({'ERROR_INVALID_INPUT'},
                         "Size of width size shoulder and tenon thickness are "
