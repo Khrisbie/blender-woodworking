@@ -5,6 +5,10 @@ Blender extensions for woodworking
 
 All operators are available in 3D view area, Tool Shelf panel ('T'), in the category tab "woodworking".
 
+# News
+- Haunches available on both sides
+- Mortise cut opposite faces (through mortise)
+
 # How to install
 
 ## Beginners
@@ -69,8 +73,15 @@ The tenon panel is organized in three parts :
 
 ### Description
 This operator will generate a new mortise on the selected quad face in edit mode.
+
 Haunched mortise make holes in adjacent faces.
+
 ![Haunched mortise](/screenshots/sample_mortise_with_haunch.png)
+
+When mortise depth is larger than the plank, the through mortise will cut the plank (a simple intersection 
+algorithm is used here, this will remove faces on the opposite side).
+
+![Through mortise](/screenshots/sample_through_mortise.png)
 
 ### Requirements
 Object should be in edit mode, a **quad** face should be selected and it must be planar and _rectangular_.
