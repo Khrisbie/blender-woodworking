@@ -266,6 +266,17 @@ class FaceToBeTransformed:
 
         return FaceToBeTransformed.__subdivide_edges(bm, edges_to_subdivide)
 
+    # Used by "remove wood" tenon option
+    def translate_along_normal(self, bm, matrix_world, depth):
+        rot_mat = matrix_world.copy().to_3x3().normalized()
+        normal_world = rot_mat * self.face.normal
+        normal_world = normal_world * depth
+
+        bmesh.ops.translate(bm,
+                            verts=self.face.verts,
+                            vec=normal_world,
+                            space=matrix_world)
+
 
 # This structure keep info about the newly created tenon face
 class TenonFace:
@@ -1254,22 +1265,30 @@ class TenonMortiseBuilder:
         # First shoulder
         if properties.haunched_first_side:
             haunch_properties = properties.haunch_first_side
-            haunch_top = self.__raise_haunched_tenon_side(bm, matrix_world,
-                                             face_to_be_transformed, tenon_top,
-                                             side_tangent, first_shoulder,
-                                             haunch_properties,
-                                             dissolve_faces)
+            haunch_top = self.__raise_haunched_tenon_side(
+                bm,
+                matrix_world,
+                face_to_be_transformed,
+                tenon_top,
+                side_tangent,
+                first_shoulder,
+                haunch_properties,
+                dissolve_faces)
             haunches_faces.append(haunch_top)
 
         # Second shoulder
         if properties.haunched_second_side:
             side_tangent.negate()
             haunch_properties = properties.haunch_second_side
-            haunch_top = self.__raise_haunched_tenon_side(bm, matrix_world,
-                                             face_to_be_transformed, tenon_top,
-                                             side_tangent, second_shoulder,
-                                             haunch_properties,
-                                             dissolve_faces)
+            haunch_top = self.__raise_haunched_tenon_side(
+                bm,
+                matrix_world,
+                face_to_be_transformed,
+                tenon_top,
+                side_tangent,
+                second_shoulder,
+                haunch_properties,
+                dissolve_faces)
             haunches_faces.append(haunch_top)
 
         return haunches_faces
@@ -1415,6 +1434,13 @@ class TenonMortiseBuilder:
         face_to_be_transformed.face = tagged_faces[0]
         face_to_be_transformed.face.tag = False
         face_to_be_transformed.extract_features(matrix_world)
+
+        if builder_properties.depth_value > 0:
+            if builder_properties.remove_wood:
+                face_to_be_transformed.translate_along_normal(
+                    bm,
+                    matrix_world,
+                    -builder_properties.depth_value)
 
         # Subdivide face
         subdivided_faces = face_to_be_transformed.subdivide_face(

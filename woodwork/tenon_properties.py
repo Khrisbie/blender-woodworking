@@ -208,6 +208,11 @@ class TenonHeightPropertyGroup(bpy.types.PropertyGroup):
 
 
 class TenonPropertyGroup(bpy.types.PropertyGroup):
+    remove_wood = bpy.props.BoolProperty(
+        name="Remove wood",
+        description="Remove wood to build tenon as in real life",
+        default=True)
+
     thickness_properties = bpy.props.PointerProperty(
         type=TenonThicknessPropertyGroup)
     height_properties = bpy.props.PointerProperty(type=TenonHeightPropertyGroup)

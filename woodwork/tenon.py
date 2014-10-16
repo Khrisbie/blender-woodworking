@@ -205,6 +205,8 @@ class TenonOperator(bpy.types.Operator):
         layout.label(text="Depth")
         layout.prop(tenon_properties, "depth_value", text="")
 
+        layout.prop(tenon_properties, "remove_wood")
+
     # used to check if the operator can run
     @classmethod
     def poll(cls, context):
