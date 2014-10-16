@@ -988,6 +988,7 @@ class TenonMortiseBuilder:
     @staticmethod
     def __find_haunch_adjacent_edge(adjacent_face, haunch_top):
         adjacent_edge = None
+        best_dist = float_info.max
         for edge in haunch_top.edges:
             # find edge in plane adjacent_face
             median = (edge.verts[0].co + edge.verts[1].co) * 0.5
@@ -995,9 +996,10 @@ class TenonMortiseBuilder:
             dist = distance_point_to_plane(median, adjacent_face.verts[0].co,
                                            adjacent_face.normal)
 
-            if abs(dist) < ZERO_TOLERANCE:
+            if abs(dist) < best_dist:
                 adjacent_edge = edge
-                break
+                best_dist = abs(dist)
+
         return adjacent_edge
 
     @staticmethod
