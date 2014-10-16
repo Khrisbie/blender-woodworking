@@ -605,11 +605,14 @@ class ThroughMortiseIntersection:
     def __find_possible_intersection_triangles(self,
                                                intersect_faces,
                                                intersect_faces_bbox,
-                                               face_to_be_transformed):
+                                               face_to_be_transformed,
+                                               not_intersecting_faces):
         tri_faces = []
         TriFace = namedtuple('TriFace', 'orig_face, v0, v1, v2, normal')
         for face in self.bm.faces:
-            if not (face in intersect_faces or face is self.top_face):
+            if not (face in intersect_faces or
+                    face is self.top_face or
+                    face in not_intersecting_faces):
                 possible_intersection = False
                 # Check possible intersection with boundary boxes
                 for intersect_face_bbox in intersect_faces_bbox:
@@ -617,8 +620,6 @@ class ThroughMortiseIntersection:
                     if intersect_face_bbox.intersect(face_bbox):
                         possible_intersection = True
                         break
-
-                # TODO : check if face is a haunch
 
                 # Check if face is behind reference face
                 if possible_intersection:
@@ -755,7 +756,9 @@ class ThroughMortiseIntersection:
 
     # Calculate edge intersection with opposite face
     # Used for through mortise
-    def create_hole_in_opposite_faces(self, face_to_be_transformed):
+    def create_hole_in_opposite_faces(self,
+                                      face_to_be_transformed,
+                                      not_intersecting_faces):
         # Get face perpendicular edges
         top_face_normal = self.top_face.normal
         intersect_edges = []
@@ -779,7 +782,8 @@ class ThroughMortiseIntersection:
         tri_faces = self.__find_possible_intersection_triangles(
             intersect_faces,
             intersect_faces_bbox,
-            face_to_be_transformed)
+            face_to_be_transformed,
+            not_intersecting_faces)
 
         # Try to intersect with triangles
         intersection_pts = \
@@ -1230,6 +1234,8 @@ class TenonMortiseBuilder:
         self.__beautify_haunched_tenon(bm, face_to_be_transformed, tenon_top,
                                        haunch_top, side_tangent, dissolve_faces)
 
+        return haunch_top
+
     # Raise tenon haunches
     def __raise_haunches(self,
                          bm,
@@ -1242,24 +1248,29 @@ class TenonMortiseBuilder:
                          properties,
                          dissolve_faces):
 
+        haunches_faces = []
         # First shoulder
         if properties.haunched_first_side:
             haunch_properties = properties.haunch_first_side
-            self.__raise_haunched_tenon_side(bm, matrix_world,
+            haunch_top = self.__raise_haunched_tenon_side(bm, matrix_world,
                                              face_to_be_transformed, tenon_top,
                                              side_tangent, first_shoulder,
                                              haunch_properties,
                                              dissolve_faces)
+            haunches_faces.append(haunch_top)
 
         # Second shoulder
         if properties.haunched_second_side:
             side_tangent.negate()
             haunch_properties = properties.haunch_second_side
-            self.__raise_haunched_tenon_side(bm, matrix_world,
+            haunch_top = self.__raise_haunched_tenon_side(bm, matrix_world,
                                              face_to_be_transformed, tenon_top,
                                              side_tangent, second_shoulder,
                                              haunch_properties,
                                              dissolve_faces)
+            haunches_faces.append(haunch_top)
+
+        return haunches_faces
 
     # Raise a haunched tenon
     def __raise_haunched_tenon(self,
@@ -1332,22 +1343,34 @@ class TenonMortiseBuilder:
             dissolve_faces = True
 
         side_tangent = face_to_be_transformed.shortest_side_tangent.copy()
-        self.__raise_haunches(bm, matrix_world, face_to_be_transformed,
-                              tenon_top, first_height_shoulder,
-                              second_height_shoulder, side_tangent,
-                              height_properties, dissolve_faces)
+        haunches_faces = self.__raise_haunches(bm,
+                                               matrix_world,
+                                               face_to_be_transformed,
+                                               tenon_top,
+                                               first_height_shoulder,
+                                               second_height_shoulder,
+                                               side_tangent,
+                                               height_properties,
+                                               dissolve_faces)
 
         side_tangent = face_to_be_transformed.longest_side_tangent.copy()
-        self.__raise_haunches(bm, matrix_world, face_to_be_transformed,
-                              tenon_top, first_thickness_shoulder,
-                              second_thickness_shoulder, side_tangent,
-                              thickness_properties, dissolve_faces)
+        haunches_faces.extend(self.__raise_haunches(bm,
+                                                    matrix_world,
+                                                    face_to_be_transformed,
+                                                    tenon_top,
+                                                    first_thickness_shoulder,
+                                                    second_thickness_shoulder,
+                                                    side_tangent,
+                                                    thickness_properties,
+                                                    dissolve_faces))
 
         if builder_properties.depth_value < 0.0:
-            through_mortise_hole_builder = ThroughMortiseIntersection(bm,
-                                                                      tenon_top)
+            through_mortise_hole_builder = ThroughMortiseIntersection(
+                bm,
+                tenon_top)
             through_mortise_hole_builder.create_hole_in_opposite_faces(
-                self.face_to_be_transformed)
+                self.face_to_be_transformed,
+                haunches_faces)
         else:
             bpy.ops.mesh.select_all(action="DESELECT")
             tenon_top.select = True
@@ -1366,7 +1389,7 @@ class TenonMortiseBuilder:
             through_mortise_hole_builder = ThroughMortiseIntersection(bm,
                                                                       tenon_top)
             through_mortise_hole_builder.create_hole_in_opposite_faces(
-                self.face_to_be_transformed)
+                self.face_to_be_transformed, [])
         else:
             bpy.ops.mesh.select_all(action="DESELECT")
             tenon_top.select = True
