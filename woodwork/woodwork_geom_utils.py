@@ -38,7 +38,8 @@ class GeomUtils:
         dir1 = vector0.normalized()
         dir2 = vector1.normalized()
         d = abs(dir1.dot(dir2))
-        return MathUtils.almost_equal_absolute(d, 1.0)
+        return MathUtils.almost_equal_absolute(
+            d, 1.0, GeomUtils.PARALLEL_VECTORS_ABSOLUTE_ERROR_THRESHOLD)
 
     @staticmethod
     def distance_point_edge(pt, edge):
@@ -60,8 +61,9 @@ class GeomUtils:
 
             pseudo_distance = plane_no * vert.co + d
 
-            if MathUtils.almost_zero(pseudo_distance,
-                                     GeomUtils.POINT_ON_SIDE_ABSOLUTE_ERROR_THRESHOLD):
+            if MathUtils.almost_zero(
+                    pseudo_distance,
+                    GeomUtils.POINT_ON_SIDE_ABSOLUTE_ERROR_THRESHOLD):
                 vert_position = Position.on_plane
             elif pseudo_distance > 0.0:
                 vert_position = Position.in_front
@@ -81,8 +83,9 @@ class GeomUtils:
 
         pseudo_distance = plane_no * vert.co + d
 
-        if MathUtils.almost_zero(pseudo_distance,
-                                 GeomUtils.POINT_ON_SIDE_ABSOLUTE_ERROR_THRESHOLD):
+        if MathUtils.almost_zero(
+                pseudo_distance,
+                GeomUtils.POINT_ON_SIDE_ABSOLUTE_ERROR_THRESHOLD):
             vert_position = Position.on_plane
         elif pseudo_distance > 0.0:
             vert_position = Position.in_front
