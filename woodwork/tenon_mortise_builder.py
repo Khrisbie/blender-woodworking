@@ -4,7 +4,6 @@ from collections import namedtuple
 
 import bmesh
 import bpy
-from mathutils import Vector
 from mathutils.geometry import (intersect_point_line,
                                 distance_point_to_plane,
                                 intersect_line_plane,
@@ -12,9 +11,10 @@ from mathutils.geometry import (intersect_point_line,
                                 normal,
                                 intersect_ray_tri)
 from enum import Enum, IntEnum, unique
-
-
-ZERO_TOLERANCE = 0.00001
+from woodwork.woodwork_math_utils import MathUtils
+from woodwork.woodwork_geom_utils import (GeomUtils,
+                                          BBox,
+                                          Position)
 
 
 # Used to retrieve faces when geometry has been deleted and faces reordered
@@ -28,13 +28,6 @@ class ReferenceGeometry(IntEnum):
     tenonHaunchAdjacentFace = 6
     edgeToRaise = 7
     haunchAdjacentEdge = 8
-
-
-class Position(Enum):
-    in_front = 1
-    behind = 2
-    on_plane = 3
-    intersecting = 4
 
 
 # Use bmesh layers to retrieve faces
@@ -78,72 +71,6 @@ class GeometryRetriever:
     def destroy(self):
         self.bm.faces.layers.int.remove(self.face_retriever)
         self.bm.edges.layers.int.remove(self.edge_retriever)
-
-
-# See http://randomascii.wordpress.com/2012/02/25/
-# comparing-floating-point-numbers-2012-edition/
-# - If you are comparing against zero, then relative epsilons and ULPs based
-#   comparisons are usually meaningless. You’ll need to use an absolute
-#   epsilon, whose value might be some small multiple of FLT_EPSILON and the
-#   inputs to your calculation. Maybe.
-# - If you are comparing against a non-zero number then relative epsilons or
-#   ULPs based comparisons are probably what you want. You’ll probably want
-#   some small multiple of FLT_EPSILON for your relative epsilon, or some small
-#   number of ULPs. An absolute epsilon could be used if you knew exactly what
-#   number you were comparing against.
-# - If you are comparing two arbitrary numbers that could be zero or non-zero
-#   then you need the kitchen sink. Good luck and God speed.
-def almost_equal_relative_or_absolute(a,
-                                      b,
-                                      max_relative_error=1.e-5,
-                                      max_absolute_error=1.e-8):
-    almost_equal = False
-    if a == b:
-        almost_equal = True
-    else:
-        #  Check if the numbers are really close
-        # -- needed when comparing numbers near zero.
-        abs_diff = abs(a - b)
-
-        if abs_diff <= max_absolute_error:
-            almost_equal = True
-        else:
-            abs_a = abs(a)
-            abs_b = abs(b)
-
-            if abs_b > abs_a:
-                largest = abs_b
-            else:
-                largest = abs_a
-
-            if abs_diff <= largest * max_relative_error:
-                almost_equal = True
-
-    return almost_equal
-
-
-def almost_zero(a):
-    return almost_equal_relative_or_absolute(a,
-                                             0.0,
-                                             max_absolute_error=ZERO_TOLERANCE)
-
-
-def same_direction(vector0, vector1):
-    dir1 = vector0.normalized()
-    dir2 = vector1.normalized()
-    d = dir1.dot(dir2)
-
-    return almost_equal_relative_or_absolute(d, 1.0) or \
-           almost_equal_relative_or_absolute(d, -1.0)
-
-
-def distance_point_edge(pt, edge):
-    line_p1 = edge.verts[0].co
-    line_p2 = edge.verts[1].co
-    ret = intersect_point_line(pt, line_p1, line_p2)
-    closest_point_on_line = ret[0]
-    distance_vector = closest_point_on_line - pt
-    return distance_vector.length
 
 
 class TenonMortiseBuilderThickness:
@@ -320,8 +247,8 @@ class TenonFace:
                             # a face (pointing inward into the face).
                             tangent = tenon_edge.calc_tangent(connected_loop)
 
-                            if same_direction(tangent,
-                                              longest_side_tangent):
+                            if GeomUtils.same_direction(tangent,
+                                                        longest_side_tangent):
 
                                 self.height_faces.append(connected_face)
 
@@ -342,8 +269,8 @@ class TenonFace:
 
             tangent0 = e0.calc_tangent(l0)
 
-            if same_direction(tangent0,
-                              shortest_side_tangent):
+            if GeomUtils.same_direction(tangent0,
+                                        shortest_side_tangent):
                 self.thickness_reference_edge = e0
             else:
                 self.thickness_reference_edge = e1
@@ -358,7 +285,7 @@ class TenonFace:
 
             tangent0 = e0.calc_tangent(l0)
 
-            if same_direction(tangent0, longest_side_tangent):
+            if GeomUtils.same_direction(tangent0, longest_side_tangent):
                 self.height_reference_edge = e0
             else:
                 self.height_reference_edge = e1
@@ -387,8 +314,8 @@ class TenonFace:
         v0_world = matrix_world * v0
         v1_world = matrix_world * v1
 
-        length1 = distance_point_edge(v1, shoulder.origin_face_edge)
-        length0 = distance_point_edge(v0, shoulder.origin_face_edge)
+        length1 = GeomUtils.distance_point_edge(v1, shoulder.origin_face_edge)
+        length0 = GeomUtils.distance_point_edge(v0, shoulder.origin_face_edge)
 
         if length1 > length0:
             edge_vector = v1_world - v0_world
@@ -457,7 +384,8 @@ class ShoulderFace:
                         if connected_loop.face == shoulder_face:
                             tangent = edge.calc_tangent(connected_loop)
 
-                            if same_direction(tangent, origin_face_tangent):
+                            if GeomUtils.same_direction(tangent,
+                                                        origin_face_tangent):
                                 shoulder_faces.append(connected_face)
 
                                 if self.reference_edge is None:
@@ -473,7 +401,7 @@ class ShoulderFace:
 
             tangent0 = e0.calc_tangent(l0)
 
-            if same_direction(tangent0, origin_face_tangent):
+            if GeomUtils.same_direction(tangent0, origin_face_tangent):
                 self.reference_edge = e0
             else:
                 self.reference_edge = e1
@@ -496,8 +424,8 @@ class ShoulderFace:
         pt1 = self.reference_edge.verts[1].co
         pt0 = self.reference_edge.verts[0].co
 
-        length1 = distance_point_edge(pt1, self.origin_face_edge)
-        length0 = distance_point_edge(pt0, self.origin_face_edge)
+        length1 = GeomUtils.distance_point_edge(pt1, self.origin_face_edge)
+        length0 = GeomUtils.distance_point_edge(pt0, self.origin_face_edge)
         if length1 > length0:
             edge_vector = (matrix_world * pt1) - (matrix_world * pt0)
         else:
@@ -508,110 +436,12 @@ class ShoulderFace:
         return final_vector - edge_vector
 
 
-class BBox:
-    def __init__(self, min_values: Vector, max_values: Vector):
-        self.min = min_values
-        self.max = max_values
-
-    def __repr__(self):
-        return "<{}({}), min={}, max={}>".format(self.__class__.__name__,
-                                                 hex(id(self)), self.min,
-                                                 self.max)
-
-    @staticmethod
-    def from_face(face):
-        min_values = Vector((float_info.max, float_info.max, float_info.max))
-        max_values = Vector((float_info.min, float_info.min, float_info.min))
-        for v in face.verts:
-            co = v.co
-            for i, axe_co in enumerate(co):
-                min_values[i] = min(min_values[i], axe_co)
-                max_values[i] = max(max_values[i], axe_co)
-        return BBox(min_values, max_values)
-
-    @staticmethod
-    def from_faces(faces):
-        min_values = Vector((float_info.max, float_info.max, float_info.max))
-        max_values = Vector((float_info.min, float_info.min, float_info.min))
-        for face in faces:
-            for v in face.verts:
-                co = v.co
-                for i, axe_co in enumerate(co):
-                    min_values[i] = min(min_values[i], axe_co)
-                    max_values[i] = max(max_values[i], axe_co)
-        return BBox(min_values, max_values)
-
-    def intersect(self, bbox):
-        possible_intersection = True
-        for axe_index in range(0, 3):
-            if self.min[axe_index] > bbox.max[axe_index]:
-                possible_intersection = False
-                break
-            if self.max[axe_index] < bbox.min[axe_index]:
-                possible_intersection = False
-                break
-
-        return possible_intersection
-
-    def point_inside(self, point):
-        point_inside = True
-        for axe_index in range(0, 3):
-            if point[axe_index] < self.min[axe_index] or \
-               point[axe_index] > self.max[axe_index]:
-                point_inside = False
-                break
-        return point_inside
-
-    def face_inside(self, face):
-        face_inside = True
-        for vert in face.verts:
-            if not self.point_inside(vert.co):
-                face_inside = False
-                break
-        return face_inside
-
-    def inside_faces(self, faces):
-        inside_faces = []
-        for face in faces:
-            if self.face_inside(face):
-                inside_faces.append(face)
-        return inside_faces
-
-    def center(self):
-        return (self.min + self.max) * 0.5
-
-
 class ThroughMortiseIntersection:
 
     def __init__(self, bm, top_face):
         self.bm = bm
         self.top_face = top_face
 
-    # returns the position of a face against a plane
-    @staticmethod
-    def __face_position(face, plane_co, plane_no) -> Position:
-        positions = set()
-        # plane equation with normal vector plane_no = (a, b, c) through the
-        # point plane_co = (x0, y0, z0) is
-        # a x + b y + c z + d = 0 where d = -a x0 -b y0 -c z0
-        d = -(plane_no * plane_co)
-        for vert in face.verts:
-
-            pseudo_distance = plane_no * vert.co + d
-
-            if almost_zero(pseudo_distance):
-                position = Position.on_plane
-            elif pseudo_distance > 0.0:
-                position = Position.in_front
-            else:
-                position = Position.behind
-
-            positions.add(position)
-        if len(positions) == 1:
-            face_position = next(iter(positions))
-        else:
-            face_position = Position.intersecting
-        return face_position
 
     def __find_possible_intersection_triangles(self,
                                                intersect_faces,
@@ -634,7 +464,7 @@ class ThroughMortiseIntersection:
 
                 # Check if face is behind reference face
                 if possible_intersection:
-                    face_position = ThroughMortiseIntersection.__face_position(
+                    face_position = GeomUtils.face_position(
                         face,
                         face_to_be_transformed.median,
                         face_to_be_transformed.normal)
@@ -777,7 +607,7 @@ class ThroughMortiseIntersection:
         for vert in self.top_face.verts:
             for edge in vert.link_edges:
                 edge_vect = edge.verts[0].co - edge.verts[1].co
-                if same_direction(edge_vect, top_face_normal):
+                if GeomUtils.same_direction(edge_vect, top_face_normal):
                     intersect_edges.append(edge)
                     edge_faces = edge.link_faces
                     for edge_face in edge_faces:
@@ -862,9 +692,9 @@ class TenonMortiseBuilder:
             edge = loop.edge
             tangent = edge.calc_tangent(loop)
             angle = tangent.angle(still_edge_tangent)
-            if almost_zero(angle):
+            if MathUtils.almost_zero(angle):
                 still_edge = edge
-            elif almost_equal_relative_or_absolute(angle, pi):
+            elif MathUtils.almost_equal_relative_or_absolute(angle, pi):
                 edge_to_raise = edge
 
         for face in still_edge.link_faces:
@@ -891,7 +721,7 @@ class TenonMortiseBuilder:
             edge = loop.edge
             tangent = edge.calc_tangent(loop)
             angle = tangent.angle(still_edge_tangent)
-            if almost_zero(angle):
+            if MathUtils.almost_zero(angle):
                 # find edge not in extruded_face
                 for vert in edge.verts:
                     link_edges = vert.link_edges
@@ -935,7 +765,7 @@ class TenonMortiseBuilder:
                 v0 = edge.verts[0]
                 v1 = edge.verts[1]
                 edge_vector = v1.co - v0.co
-                if same_direction(edge_vector, direction):
+                if GeomUtils.same_direction(edge_vector, direction):
 
                     center = (v1.co + v0.co) * 0.5
                     signed_distance = distance_point_to_plane(v0.co, center,
@@ -988,7 +818,7 @@ class TenonMortiseBuilder:
                     if is_mortise:
                         normal.negate()
                     angle = side_tangent.angle(normal)
-                    if almost_equal_relative_or_absolute(angle, pi):
+                    if MathUtils.almost_equal_relative_or_absolute(angle, pi):
                         adjacent_face = face
                         break
             if adjacent_face is not None:
@@ -1023,7 +853,8 @@ class TenonMortiseBuilder:
         for edge in reference_face.edges:
             for face in edge.link_faces:
                 if face != reference_face:
-                    if same_direction(perpendicular_direction, face.normal):
+                    if GeomUtils.same_direction(perpendicular_direction,
+                                                face.normal):
                         found.append(face)
                         break
         return found
@@ -1060,7 +891,7 @@ class TenonMortiseBuilder:
             best_distance = float_info.max
             for edge in adjacent_face.edges:
                 # find nearest edge
-                dist = distance_point_edge(vert.co, edge)
+                dist = GeomUtils.distance_point_edge(vert.co, edge)
                 if dist < best_distance:
                     nearest_edge = edge
                     best_distance = dist
@@ -1089,7 +920,9 @@ class TenonMortiseBuilder:
             new_vert = connection['new_vert']
             verts_to_merge.append(new_vert)
 
-        bmesh.ops.automerge(bm, verts=verts_to_merge, dist=ZERO_TOLERANCE)
+        bmesh.ops.automerge(bm,
+                            verts=verts_to_merge,
+                            dist=GeomUtils.POINTS_ARE_NEAR_ABSOLUTE_ERROR_THRESHOLD)
 
         # Geometry has changed from now on so all old references may be wrong
         #  (adjacent_edge, adjacent_face ...)
@@ -1118,7 +951,7 @@ class TenonMortiseBuilder:
                 if loop.face == tenon_top:
                     tangent = edge.calc_tangent(loop)
                     angle = tangent.angle(side_tangent)
-                    if almost_zero(angle):
+                    if MathUtils.almost_zero(angle):
                         face_vertices.append(edge.verts[0])
                         face_vertices.append(edge.verts[1])
                         break
@@ -1146,7 +979,7 @@ class TenonMortiseBuilder:
             for face in edge.link_faces:
                 if face is not haunch_top:
                         angle = side_tangent.angle(face.normal)
-                        if almost_zero(angle):
+                        if MathUtils.almost_zero(angle):
                             hole_face = face
                             break
             if hole_face is not None:
@@ -1171,7 +1004,7 @@ class TenonMortiseBuilder:
             distance = distance_point_to_plane(center,
                                                face_to_be_transformed.median,
                                                face_to_be_transformed.normal)
-            if abs(distance) < ZERO_TOLERANCE:
+            if MathUtils.almost_zero(distance):
                 top_edge_to_dissolve = edge
                 break
 
@@ -1191,7 +1024,7 @@ class TenonMortiseBuilder:
             for loop in haunch_top.loops:
                 edge = loop.edge
                 tangent = edge.calc_tangent(loop)
-                if not same_direction(tangent, side_tangent):
+                if not GeomUtils.same_direction(tangent, side_tangent):
                     v0 = loop.vert
                     v1 = loop.link_loop_next.vert
 

@@ -2,10 +2,9 @@ import bpy
 import bmesh
 from woodwork.tenon_mortise_builder import (TenonMortiseBuilder,
                                             TenonMortiseBuilderProps,
-                                            FaceToBeTransformed,
-                                            almost_equal_relative_or_absolute)
-from woodwork.tenon import (is_face_planar,
-                            is_face_rectangular)
+                                            FaceToBeTransformed)
+from woodwork.woodwork_geom_utils import GeomUtils
+from woodwork.woodwork_math_utils import MathUtils
 
 
 class MortiseOperator(bpy.types.Operator):
@@ -39,12 +38,12 @@ class MortiseOperator(bpy.types.Operator):
                         "Selected face is not quad.")
             return False
 
-        if not is_face_planar(face):
+        if not GeomUtils.is_face_planar(face):
             self.report({'ERROR_INVALID_INPUT'},
                         "Selected face is not planar.")
             return False
 
-        if not is_face_rectangular(face):
+        if not GeomUtils.is_face_rectangular(face):
             self.report({'ERROR_INVALID_INPUT'},
                         "Selected face is not rectangular.")
             return False
@@ -326,7 +325,7 @@ class MortiseOperator(bpy.types.Operator):
 
         # Init default values, look if face has changed too
         if (thickness_properties.value == -1.0 or
-                (not almost_equal_relative_or_absolute(
+                (not MathUtils.almost_equal_relative_or_absolute(
                     face_to_be_transformed.shortest_length,
                     self.shortest_length))):
             thickness_properties.value = \
@@ -334,7 +333,7 @@ class MortiseOperator(bpy.types.Operator):
             thickness_properties.percentage = 1.0 / 3.0
             thickness_properties.centered = True
         if (height_properties.value == -1.0 or
-                (not almost_equal_relative_or_absolute(
+                (not MathUtils.almost_equal_relative_or_absolute(
                     face_to_be_transformed.longest_length,
                     self.longest_length))):
             height_properties.value = (face_to_be_transformed.longest_length *
@@ -342,7 +341,7 @@ class MortiseOperator(bpy.types.Operator):
             height_properties.percentage = 2.0 / 3.0
             height_properties.centered = True
         if (mortise_properties.depth_value == -1.0 or
-                (not almost_equal_relative_or_absolute(
+                (not MathUtils.almost_equal_relative_or_absolute(
                     face_to_be_transformed.longest_length,
                     self.longest_length))):
             mortise_properties.depth_value = \
@@ -455,7 +454,7 @@ class MortiseOperator(bpy.types.Operator):
         # Check input values
         total_length = height_properties.shoulder_value + \
             height_properties.value
-        if ((not almost_equal_relative_or_absolute(
+        if ((not MathUtils.almost_equal_relative_or_absolute(
                 total_length,
                 face_to_be_transformed.longest_length)) and
                 (total_length > face_to_be_transformed.longest_length)):
@@ -466,7 +465,7 @@ class MortiseOperator(bpy.types.Operator):
 
         total_length = thickness_properties.shoulder_value + \
             thickness_properties.value
-        if ((not almost_equal_relative_or_absolute(
+        if ((not MathUtils.almost_equal_relative_or_absolute(
                 total_length,
                 face_to_be_transformed.shortest_length)) and
                 (total_length > face_to_be_transformed.shortest_length)):

@@ -1,30 +1,9 @@
 import bpy
 import bmesh
-from mathutils import Vector, Matrix
-from mathutils.geometry import distance_point_to_plane
-from math import pi
 from woodwork.tenon_mortise_builder import (TenonMortiseBuilder,
-                                            FaceToBeTransformed,
-                                            almost_equal_relative_or_absolute)
-
-
-# is_face_planar
-#
-# Tests a face to see if it is planar.
-def is_face_planar(face, error=0.0005):
-    for v in face.verts:
-        d = distance_point_to_plane(v.co, face.verts[0].co, face.normal)
-        if d < -error or d > error:
-            return False
-    return True
-
-
-def is_face_rectangular(face, error=0.0005):
-    for loop in face.loops:
-        perp_angle = loop.calc_angle() - (pi / 2)
-        if perp_angle < -error or perp_angle > error:
-            return False
-    return True
+                                            FaceToBeTransformed)
+from woodwork.woodwork_geom_utils import GeomUtils
+from woodwork.woodwork_math_utils import MathUtils
 
 
 class TenonOperator(bpy.types.Operator):
@@ -58,12 +37,12 @@ class TenonOperator(bpy.types.Operator):
                         "Selected face is not quad.")
             return False
 
-        if not is_face_planar(face):
+        if not GeomUtils.is_face_planar(face):
             self.report({'ERROR_INVALID_INPUT'},
                         "Selected face is not planar.")
             return False
 
-        if not is_face_rectangular(face):
+        if not GeomUtils.is_face_rectangular(face):
             self.report({'ERROR_INVALID_INPUT'},
                         "Selected face is not rectangular.")
             return False
@@ -246,7 +225,7 @@ class TenonOperator(bpy.types.Operator):
 
         # Init default values, look if face has changed too
         if (thickness_properties.value == -1.0 or
-                (not almost_equal_relative_or_absolute(
+                (not MathUtils.almost_equal_relative_or_absolute(
                     face_to_be_transformed.shortest_length,
                     self.shortest_length))):
             thickness_properties.value = \
@@ -254,7 +233,7 @@ class TenonOperator(bpy.types.Operator):
             thickness_properties.percentage = 1.0 / 3.0
             thickness_properties.centered = True
         if (height_properties.value == -1.0 or
-                (not almost_equal_relative_or_absolute(
+                (not MathUtils.almost_equal_relative_or_absolute(
                     face_to_be_transformed.longest_length,
                     self.longest_length))):
             height_properties.value = (face_to_be_transformed.longest_length *
@@ -262,7 +241,7 @@ class TenonOperator(bpy.types.Operator):
             height_properties.percentage = 2.0 / 3.0
             height_properties.centered = True
         if (tenon_properties.depth_value == -1.0 or
-                (not almost_equal_relative_or_absolute(
+                (not MathUtils.almost_equal_relative_or_absolute(
                     face_to_be_transformed.longest_length,
                     self.longest_length))):
             tenon_properties.depth_value = \
@@ -375,7 +354,7 @@ class TenonOperator(bpy.types.Operator):
         # Check input values
         total_length = height_properties.shoulder_value + \
             height_properties.value
-        if ((not almost_equal_relative_or_absolute(
+        if ((not MathUtils.almost_equal_relative_or_absolute(
                 total_length,
                 face_to_be_transformed.longest_length)) and
                 (total_length > face_to_be_transformed.longest_length)):
@@ -386,7 +365,7 @@ class TenonOperator(bpy.types.Operator):
 
         total_length = thickness_properties.shoulder_value + \
             thickness_properties.value
-        if ((not almost_equal_relative_or_absolute(
+        if ((not MathUtils.almost_equal_relative_or_absolute(
                 total_length,
                 face_to_be_transformed.shortest_length)) and
                 (total_length > face_to_be_transformed.shortest_length)):
@@ -420,9 +399,3 @@ def register():
 def unregister():
     bpy.utils.unregister_class(TenonOperator)
 
-
-# ----------------------------------------------
-# Code to run the script alone
-# ----------------------------------------------
-if __name__ == "__main__":
-    register()
