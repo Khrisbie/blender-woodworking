@@ -107,8 +107,9 @@ class BBox:
 
     @staticmethod
     def from_face(face):
-        min_values = Vector((float_info.max, float_info.max, float_info.max))
-        max_values = Vector((float_info.min, float_info.min, float_info.min))
+        min_values = Vector.Fill(3, MathUtils.VECTOR_MAX_FLOAT_VALUE)
+        max_values = Vector.Fill(3, MathUtils.VECTOR_MIN_FLOAT_VALUE)
+
         for v in face.verts:
             co = v.co
             for i, axe_co in enumerate(co):
@@ -118,8 +119,8 @@ class BBox:
 
     @staticmethod
     def from_faces(faces):
-        min_values = Vector((float_info.max, float_info.max, float_info.max))
-        max_values = Vector((float_info.min, float_info.min, float_info.min))
+        min_values = Vector.Fill(3, MathUtils.VECTOR_MAX_FLOAT_VALUE)
+        max_values = Vector.Fill(3, MathUtils.VECTOR_MIN_FLOAT_VALUE)
         for face in faces:
             for v in face.verts:
                 co = v.co

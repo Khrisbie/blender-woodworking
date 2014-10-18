@@ -6,6 +6,14 @@ class MathUtils:
     ABSOLUTE_ERROR_THRESHOLD = 1.e-8
     RELATIVE_ERROR_THRESHOLD = 1.e-5
 
+    VECTOR_MAX_FLOAT_VALUE = 3.40282347E+38
+
+    # Don't work, don't know why...
+    #VECTOR_MIN_FLOAT_VALUE = 1.17549435E-38
+
+    VECTOR_MIN_FLOAT_VALUE = -99999999999999999.0
+
+
     # See http://randomascii.wordpress.com/2012/02/25/
     # comparing-floating-point-numbers-2012-edition/
     # - If you are comparing against zero, then relative epsilons and ULPs based
