@@ -84,6 +84,7 @@ class TenonOperator(bpy.types.Operator):
             TenonOperator.__draw_percentage(width_side_box,
                                             thickness_properties,
                                             "percentage", "value")
+
         if thickness_properties.type != "max":
             width_side_box.label(text="Position")
             width_side_box.prop(thickness_properties, "centered")
@@ -281,6 +282,12 @@ class TenonOperator(bpy.types.Operator):
         if height_properties.type == "percentage":
             height_properties.value = face_to_be_transformed.longest_length * \
                 height_properties.percentage
+
+        # If max length specified, don't set shoulder size
+        if thickness_properties.type == "max":
+            thickness_properties.centered = True
+        if height_properties.type == "max":
+            height_properties.centered = True
 
         # Init values linked to shoulder size
         if thickness_properties.centered:

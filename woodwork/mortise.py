@@ -382,6 +382,12 @@ class MortiseOperator(bpy.types.Operator):
             height_properties.value = face_to_be_transformed.longest_length * \
                 height_properties.percentage
 
+        # If max length specified, don't set shoulder size
+        if thickness_properties.type == "max":
+            thickness_properties.centered = True
+        if height_properties.type == "max":
+            height_properties.centered = True
+
         # Init values linked to shoulder size
         if thickness_properties.centered:
             thickness_properties.shoulder_value = ((

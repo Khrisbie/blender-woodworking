@@ -171,24 +171,22 @@ class FaceToBeTransformed:
     def subdivide_face(self, bm, height_properties, thickness_properties):
         edges_to_subdivide = []
 
-        max_centered_height = bool(height_properties.type == "max" and
-                                   height_properties.centered)
-        max_centered_thickness = bool(thickness_properties.type == "max" and
-                                      thickness_properties.centered)
+        max_height = bool(height_properties.type == "max")
+        max_thickness = bool(thickness_properties.type == "max")
 
-        if max_centered_height and not max_centered_thickness:
+        if max_height and not max_thickness:
             # if tenon height set to maximum, select shortest side edges
             # to subdivide only in this direction
             for edge in self.shortest_edges:
                 edges_to_subdivide.append(edge)
 
-        elif max_centered_thickness and not max_centered_height:
+        elif max_thickness and not max_height:
             # if tenon thickness set to maximum, select longest side edges
             # to subdivide only in this direction
             for edge in self.longest_edges:
                 edges_to_subdivide.append(edge)
 
-        elif not (max_centered_height and max_centered_thickness):
+        else:
             edges_to_subdivide = self.face.edges
 
         return FaceToBeTransformed.__subdivide_edges(bm, edges_to_subdivide)
@@ -243,22 +241,22 @@ class TenonFace:
                     connected_loops = tenon_edge.link_loops
                     for connected_loop in connected_loops:
                         if connected_loop.face == connected_face:
-                            # Return the tangent at this edge relative to
-                            # a face (pointing inward into the face).
+
                             tangent = tenon_edge.calc_tangent(connected_loop)
 
                             if GeomUtils.same_direction(tangent,
                                                         longest_side_tangent):
+                                if thickness_properties.type != 'max':
+                                    self.height_faces.append(connected_face)
 
-                                self.height_faces.append(connected_face)
-
-                                if self.height_reference_edge is None:
-                                    self.height_reference_edge = tenon_edge
+                                    if self.height_reference_edge is None:
+                                        self.height_reference_edge = tenon_edge
                             else:
-                                self.thickness_faces.append(connected_face)
+                                if height_properties.type != 'max':
+                                    self.thickness_faces.append(connected_face)
 
-                                if self.thickness_reference_edge is None:
-                                    self.thickness_reference_edge = tenon_edge
+                                    if self.thickness_reference_edge is None:
+                                        self.thickness_reference_edge = tenon_edge
 
         if height_properties.type == "max" and height_properties.centered:
             # get tenon side facing the smallest side
@@ -338,10 +336,11 @@ class TenonFace:
 
 # This describes a shoulder adjacent to the tenon face
 class ShoulderFace:
-    def __init__(self):
+    def __init__(self, has_neighbor_faces):
         self.face = None
         self.reference_edge = None
         self.origin_face_edge = None
+        self.has_neighbor_faces = has_neighbor_faces
 
     # gets the shoulder : it's a face in tenon_adjacent_faces that is not
     # the tenon itself
@@ -367,29 +366,32 @@ class ShoulderFace:
                     self.origin_face_edge = origin_face_edges[0]
                     break
 
-    def find_verts_to_translate(self, origin_face_tangent, tenon_faces):
+    def find_verts_to_translate(self,
+                                origin_face_tangent,
+                                tenon_faces):
 
         # find faces to scale
         shoulder_face = self.face
         shoulder_faces = [shoulder_face]
 
-        for edge in shoulder_face.edges:
-            connected_faces = edge.link_faces
+        if self.has_neighbor_faces:
+            for edge in shoulder_face.edges:
+                connected_faces = edge.link_faces
 
-            for connected_face in connected_faces:
-                if connected_face != shoulder_face:
-                    connected_loops = edge.link_loops
+                for connected_face in connected_faces:
+                    if connected_face != shoulder_face:
+                        connected_loops = edge.link_loops
 
-                    for connected_loop in connected_loops:
-                        if connected_loop.face == shoulder_face:
-                            tangent = edge.calc_tangent(connected_loop)
+                        for connected_loop in connected_loops:
+                            if connected_loop.face == shoulder_face:
+                                tangent = edge.calc_tangent(connected_loop)
 
-                            if GeomUtils.same_direction(tangent,
-                                                        origin_face_tangent):
-                                shoulder_faces.append(connected_face)
+                                if GeomUtils.same_direction(tangent,
+                                                            origin_face_tangent):
+                                    shoulder_faces.append(connected_face)
 
-                                if self.reference_edge is None:
-                                    self.reference_edge = edge
+                                    if self.reference_edge is None:
+                                        self.reference_edge = edge
 
         # when height or thickness set to the max and tenon is centered,
         # this could happen...
@@ -972,28 +974,29 @@ class TenonMortiseBuilder:
 
     # Find hole face
     @staticmethod
-    def __find_haunch_external_face(haunch_top,
-                                    side_tangent):
+    def __find_external_face(top, side_tangent):
         hole_face = None
-        for edge in haunch_top.edges:
-            for face in edge.link_faces:
-                if face is not haunch_top:
+        for edge in top.edges:
+            if not edge.is_convex:
+                # deal only with faces with normals inside
+                for face in edge.link_faces:
+                    if face is not top:
                         angle = side_tangent.angle(face.normal)
                         if MathUtils.almost_zero(angle):
                             hole_face = face
                             break
-            if hole_face is not None:
-                break
+                if hole_face is not None:
+                    break
         return hole_face
 
     @staticmethod
-    def __make_mortise_haunch_hole_on_side_face(bm,
-                                                face_to_be_transformed,
-                                                haunch_top,
-                                                side_tangent):
+    def __make_hole_on_side_face(bm,
+                                 face_to_be_transformed,
+                                 top_face,
+                                 side_tangent):
         # This is the face to transform to an hole
-        hole_face = TenonMortiseBuilder.__find_haunch_external_face(
-            haunch_top, side_tangent)
+        hole_face = TenonMortiseBuilder.__find_external_face(
+            top_face, side_tangent)
 
         # Get top edge
         top_edge_to_dissolve = None
@@ -1021,7 +1024,7 @@ class TenonMortiseBuilder:
             adjacent_normal = adjacent_face.normal
 
             could_intersect = True
-            for loop in haunch_top.loops:
+            for loop in top_face.loops:
                 edge = loop.edge
                 tangent = edge.calc_tangent(loop)
                 if not GeomUtils.same_direction(tangent, side_tangent):
@@ -1045,9 +1048,10 @@ class TenonMortiseBuilder:
                         origin_pt = v1
                     translate_vec = intersection_pt - origin_pt.co
 
-                    bmesh.ops.translate(bm,
-                                        verts=[origin_pt],
-                                        vec=translate_vec)
+                    if not GeomUtils.points_are_same(intersection_pt, origin_pt.co):
+                        bmesh.ops.translate(bm,
+                                            verts=[origin_pt],
+                                            vec=translate_vec)
             # dissolve top edge
             if could_intersect:
                 bmesh.ops.dissolve_edges(bm, edges=[top_edge_to_dissolve])
@@ -1071,7 +1075,7 @@ class TenonMortiseBuilder:
                 shoulder.face)
 
             if haunch_properties.depth_value < 0.0:
-                TenonMortiseBuilder.__make_mortise_haunch_hole_on_side_face(
+                TenonMortiseBuilder.__make_hole_on_side_face(
                     bm,
                     face_to_be_transformed,
                     haunch_top,
@@ -1244,6 +1248,38 @@ class TenonMortiseBuilder:
                                                                       tenon_top)
             through_mortise_hole_builder.create_hole_in_opposite_faces(
                 self.face_to_be_transformed, [])
+
+            if builder_properties.thickness_properties.type == "max":
+                side_tangent = self.face_to_be_transformed.longest_side_tangent.copy()
+
+                TenonMortiseBuilder.__make_hole_on_side_face(
+                    bm,
+                    self.face_to_be_transformed,
+                    tenon_top,
+                    side_tangent)
+
+                side_tangent.negate()
+                TenonMortiseBuilder.__make_hole_on_side_face(
+                    bm,
+                    self.face_to_be_transformed,
+                    tenon_top,
+                    side_tangent)
+            if builder_properties.height_properties.type == "max":
+                side_tangent = self.face_to_be_transformed.shortest_side_tangent.copy()
+
+                TenonMortiseBuilder.__make_hole_on_side_face(
+                    bm,
+                    self.face_to_be_transformed,
+                    tenon_top,
+                    side_tangent)
+
+                side_tangent.negate()
+                TenonMortiseBuilder.__make_hole_on_side_face(
+                    bm,
+                    self.face_to_be_transformed,
+                    tenon_top,
+                    side_tangent)
+
         else:
             bpy.ops.mesh.select_all(action="DESELECT")
             tenon_top.select = True
@@ -1303,14 +1339,15 @@ class TenonMortiseBuilder:
         first_height_shoulder = None
         second_height_shoulder = None
         if not height_properties.centered:
-            first_height_shoulder = ShoulderFace()
+            has_neighbor_faces = thickness_properties.type != 'max'
+            first_height_shoulder = ShoulderFace(has_neighbor_faces)
             first_height_shoulder.get_from_tenon(
                 tenon,
                 tenon.thickness_faces,
                 False,
                 face_to_be_transformed.shortest_edges)
 
-            second_height_shoulder = ShoulderFace()
+            second_height_shoulder = ShoulderFace(has_neighbor_faces)
             second_height_shoulder.get_from_tenon(
                 tenon,
                 tenon.thickness_faces,
@@ -1341,14 +1378,15 @@ class TenonMortiseBuilder:
         first_thickness_shoulder = None
         second_thickness_shoulder = None
         if not thickness_properties.centered:
-            first_thickness_shoulder = ShoulderFace()
+            has_neighbor_faces = height_properties.type != 'max'
+            first_thickness_shoulder = ShoulderFace(has_neighbor_faces)
             first_thickness_shoulder.get_from_tenon(
                 tenon,
                 tenon.height_faces,
                 False,
                 face_to_be_transformed.longest_edges)
 
-            second_thickness_shoulder = ShoulderFace()
+            second_thickness_shoulder = ShoulderFace(has_neighbor_faces)
             second_thickness_shoulder.get_from_tenon(
                 tenon,
                 tenon.height_faces,

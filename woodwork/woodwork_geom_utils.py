@@ -19,6 +19,7 @@ class GeomUtils:
     PARALLEL_VECTORS_ABSOLUTE_ERROR_THRESHOLD = 1.e-5
     POINT_ON_SIDE_ABSOLUTE_ERROR_THRESHOLD = 1.e-4
     POINTS_ARE_NEAR_ABSOLUTE_ERROR_THRESHOLD = 1.e-5
+    POINTS_ARE_SAME_ABSOLUTE_ERROR_THRESHOLD = 1.e-6
 
     @staticmethod
     def is_face_planar(face):
@@ -94,6 +95,23 @@ class GeomUtils:
 
         return vert_position
 
+    @staticmethod
+    def points_are_same(vector0, vector1):
+        same = False
+        dist = vector0[0] - vector1[0]
+        if (dist > -GeomUtils.POINTS_ARE_SAME_ABSOLUTE_ERROR_THRESHOLD) and (
+            dist < GeomUtils.POINTS_ARE_SAME_ABSOLUTE_ERROR_THRESHOLD):
+            dist = vector0[1] - vector1[1]
+            if (
+                dist > -GeomUtils.POINTS_ARE_SAME_ABSOLUTE_ERROR_THRESHOLD) \
+                    and (
+                dist < GeomUtils.POINTS_ARE_SAME_ABSOLUTE_ERROR_THRESHOLD):
+                dist = vector0[2] - vector1[2]
+                if (
+                    dist > -GeomUtils.POINTS_ARE_SAME_ABSOLUTE_ERROR_THRESHOLD) and (
+                    dist < GeomUtils.POINTS_ARE_SAME_ABSOLUTE_ERROR_THRESHOLD):
+                    same = True
+        return same
 
 class BBox:
     def __init__(self, min_values: Vector, max_values: Vector):
