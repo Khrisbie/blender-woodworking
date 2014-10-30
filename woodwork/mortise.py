@@ -487,10 +487,8 @@ class MortiseOperator(bpy.types.Operator):
         builder_properties = \
             MortiseOperator.__mortise_properties_to_builder_properties(
                 mortise_properties)
-        mortise_builder = TenonMortiseBuilder(
-            face_to_be_transformed,
-            builder_properties)
-        mortise_builder.create(bm, matrix_world)
+        mortise_builder = TenonMortiseBuilder(builder_properties)
+        mortise_builder.create(bm, matrix_world, face_to_be_transformed)
 
         # Flush selection
         bm.select_flush_mode()
