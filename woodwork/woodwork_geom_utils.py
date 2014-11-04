@@ -79,16 +79,22 @@ class GeomUtils:
         return face_position
 
     @staticmethod
-    def point_position(vert, plane_co, plane_no) -> Position:
+    def distance_point_to_plane(vert_co, plane_co, plane_no):
         d = -(plane_no * plane_co)
 
-        pseudo_distance = plane_no * vert.co + d
+        return plane_no * vert_co + d
+
+    @staticmethod
+    def point_position(vert, plane_co, plane_no) -> Position:
+
+        dist = GeomUtils.distance_point_to_plane(
+            vert.co, plane_co, plane_no)
 
         if MathUtils.almost_zero(
-                pseudo_distance,
+                dist,
                 GeomUtils.POINT_ON_SIDE_ABSOLUTE_ERROR_THRESHOLD):
             vert_position = Position.on_plane
-        elif pseudo_distance > 0.0:
+        elif dist > 0.0:
             vert_position = Position.in_front
         else:
             vert_position = Position.behind

@@ -86,34 +86,33 @@ class MortiseOperator(bpy.types.Operator):
                                               thickness_properties,
                                               "percentage", "value")
 
-        if thickness_properties.type != "max":
-            width_side_box.label(text="Position")
-            width_side_box.prop(thickness_properties, "centered")
-            if not thickness_properties.centered:
-                width_side_box.label(text="Thickness shoulder type")
-                width_side_box.prop(thickness_properties, "shoulder_type",
+        width_side_box.label(text="Position")
+        width_side_box.prop(thickness_properties, "centered")
+        if not thickness_properties.centered:
+            width_side_box.label(text="Thickness shoulder type")
+            width_side_box.prop(thickness_properties, "shoulder_type",
+                                text="")
+            if thickness_properties.shoulder_type == "value":
+                width_side_box.prop(thickness_properties, "shoulder_value",
                                     text="")
-                if thickness_properties.shoulder_type == "value":
-                    width_side_box.prop(thickness_properties, "shoulder_value",
-                                        text="")
-                elif thickness_properties.shoulder_type == "percentage":
-                    MortiseOperator.__draw_percentage(width_side_box,
-                                                      thickness_properties,
-                                                      "shoulder_percentage",
-                                                      "shoulder_value")
+            elif thickness_properties.shoulder_type == "percentage":
+                MortiseOperator.__draw_percentage(width_side_box,
+                                                  thickness_properties,
+                                                  "shoulder_percentage",
+                                                  "shoulder_value")
 
-                width_side_box.prop(thickness_properties, "reverse_shoulder")
-                width_side_box.prop(thickness_properties, "haunched_first_side")
-                if thickness_properties.haunched_first_side:
-                    haunch_properties = thickness_properties.haunch_first_side
-                    MortiseOperator.__draw_haunch_properties(width_side_box,
-                                                             haunch_properties)
-                width_side_box.prop(thickness_properties,
-                                    "haunched_second_side")
-                if thickness_properties.haunched_second_side:
-                    haunch_properties = thickness_properties.haunch_second_side
-                    MortiseOperator.__draw_haunch_properties(width_side_box,
-                                                             haunch_properties)
+            width_side_box.prop(thickness_properties, "reverse_shoulder")
+            width_side_box.prop(thickness_properties, "haunched_first_side")
+            if thickness_properties.haunched_first_side:
+                haunch_properties = thickness_properties.haunch_first_side
+                MortiseOperator.__draw_haunch_properties(width_side_box,
+                                                         haunch_properties)
+            width_side_box.prop(thickness_properties,
+                                "haunched_second_side")
+            if thickness_properties.haunched_second_side:
+                haunch_properties = thickness_properties.haunch_second_side
+                MortiseOperator.__draw_haunch_properties(width_side_box,
+                                                         haunch_properties)
 
     @staticmethod
     def __draw_height_properties(layout, height_properties):
@@ -127,33 +126,32 @@ class MortiseOperator(bpy.types.Operator):
                                               height_properties, "percentage",
                                               "value")
 
-        if height_properties.type != "max":
-            length_side_box.label(text="Position")
-            length_side_box.prop(height_properties, "centered")
-            if not height_properties.centered:
-                length_side_box.label(text="Height shoulder type")
-                length_side_box.prop(height_properties, "shoulder_type",
+        length_side_box.label(text="Position")
+        length_side_box.prop(height_properties, "centered")
+        if not height_properties.centered:
+            length_side_box.label(text="Height shoulder type")
+            length_side_box.prop(height_properties, "shoulder_type",
+                                 text="")
+            if height_properties.shoulder_type == "value":
+                length_side_box.prop(height_properties, "shoulder_value",
                                      text="")
-                if height_properties.shoulder_type == "value":
-                    length_side_box.prop(height_properties, "shoulder_value",
-                                         text="")
-                elif height_properties.shoulder_type == "percentage":
-                    MortiseOperator.__draw_percentage(length_side_box,
-                                                      height_properties,
-                                                      "shoulder_percentage",
-                                                      "shoulder_value")
+            elif height_properties.shoulder_type == "percentage":
+                MortiseOperator.__draw_percentage(length_side_box,
+                                                  height_properties,
+                                                  "shoulder_percentage",
+                                                  "shoulder_value")
 
-                length_side_box.prop(height_properties, "reverse_shoulder")
-                length_side_box.prop(height_properties, "haunched_first_side")
-                if height_properties.haunched_first_side:
-                    haunch_properties = height_properties.haunch_first_side
-                    MortiseOperator.__draw_haunch_properties(length_side_box,
-                                                             haunch_properties)
-                length_side_box.prop(height_properties, "haunched_second_side")
-                if height_properties.haunched_second_side:
-                    haunch_properties = height_properties.haunch_second_side
-                    MortiseOperator.__draw_haunch_properties(length_side_box,
-                                                             haunch_properties)
+            length_side_box.prop(height_properties, "reverse_shoulder")
+            length_side_box.prop(height_properties, "haunched_first_side")
+            if height_properties.haunched_first_side:
+                haunch_properties = height_properties.haunch_first_side
+                MortiseOperator.__draw_haunch_properties(length_side_box,
+                                                         haunch_properties)
+            length_side_box.prop(height_properties, "haunched_second_side")
+            if height_properties.haunched_second_side:
+                haunch_properties = height_properties.haunch_second_side
+                MortiseOperator.__draw_haunch_properties(length_side_box,
+                                                         haunch_properties)
 
     # Custom layout
     def draw(self, context):
@@ -381,12 +379,6 @@ class MortiseOperator(bpy.types.Operator):
         if height_properties.type == "percentage":
             height_properties.value = face_to_be_transformed.longest_length * \
                 height_properties.percentage
-
-        # If max length specified, don't set shoulder size
-        if thickness_properties.type == "max":
-            thickness_properties.centered = True
-        if height_properties.type == "max":
-            height_properties.centered = True
 
         # Init values linked to shoulder size
         if thickness_properties.centered:
