@@ -199,6 +199,7 @@ class FaceToBeTransformed:
 
     # Used by "remove wood" tenon option
     def translate_along_normal(self, bm, matrix_world, depth):
+        #TODO: put in math_utils
         rot_mat = matrix_world.copy().to_3x3().normalized()
         normal_world = rot_mat * self.face.normal
         normal_world = normal_world * depth
@@ -318,16 +319,30 @@ class TenonFace:
                                                   matrix_world):
         # Find vector direction
         direction = shoulder.vector_to_be_resized
+
         v0 = reference_edge.verts[0].co
         v1 = reference_edge.verts[1].co
+
         vector_to_be_resized = matrix_world * v1 - matrix_world * v0
         angle = vector_to_be_resized.angle(direction)
-        if not MathUtils.almost_zero(angle):
-            vector_to_be_resized = matrix_world * v0 - matrix_world * v1
+        if reference_edge.is_convex:
+            # shoulder size is larger than actual tenon end
+            if MathUtils.almost_zero(angle):
+                vector_to_be_resized.negate()
+            vector_to_be_resized_inverted = vector_to_be_resized.copy()
+            vector_to_be_resized_inverted.negate()
 
-        final_vector = vector_to_be_resized * scale_factor
+            final_vector = vector_to_be_resized_inverted * scale_factor
 
-        return final_vector - vector_to_be_resized
+            translate_vector = final_vector + vector_to_be_resized_inverted
+        else:
+            if not MathUtils.almost_zero(angle):
+                vector_to_be_resized.negate()
+            final_vector = vector_to_be_resized * scale_factor
+
+            translate_vector = final_vector - vector_to_be_resized
+
+        return translate_vector
 
     @staticmethod
     def find_verts_to_translate(tenon_faces, shoulder_verts):
@@ -362,7 +377,8 @@ class ShoulderFace:
                 common_edges = tenon_edges.intersection(face.edges)
                 common_edge = common_edges.pop()
                 loops = common_edge.link_loops
-                tenon_loop = next(loop for loop in loops if loop.face is tenon_face)
+                tenon_loop = next(
+                    loop for loop in loops if loop.face is tenon_face)
                 direction = common_edge.calc_tangent(tenon_loop)
                 angle = direction.angle(shoulder_direction)
                 if MathUtils.almost_zero(angle):
@@ -442,6 +458,7 @@ class ShoulderFace:
 
     def compute_translation_vector(self, shoulder_value, matrix_world):
         # just rotate and scale vector to world coordinates
+        #TODO: put in math_utils
         edge_vector = matrix_world.to_3x3() * self.vector_to_be_resized
         shoulder_length_to_resize = edge_vector.length
         scale_factor = shoulder_value / shoulder_length_to_resize
@@ -454,7 +471,6 @@ class ThroughMortiseIntersection:
     def __init__(self, bm, top_face):
         self.bm = bm
         self.top_face = top_face
-
 
     def __find_possible_intersection_triangles(self,
                                                intersect_faces,
@@ -884,11 +900,13 @@ class HeightAndThicknessSetup:
                     self.geometry_retriever.save_face(
                         tenon.face,
                         ReferenceGeometry.tenonFace)
-                    merge_threshold = GeomUtils.POINTS_ARE_NEAR_ABSOLUTE_ERROR_THRESHOLD
+                    merge_threshold = \
+                        GeomUtils.POINTS_ARE_NEAR_ABSOLUTE_ERROR_THRESHOLD
                     bmesh.ops.automerge(mesh_object_data.bm,
                                         verts=list(verts_to_translate),
                                         dist=merge_threshold)
-                    tenon.face = self.geometry_retriever.retrieve_face(ReferenceGeometry.tenonFace)
+                    tenon.face = self.geometry_retriever.retrieve_face(
+                        ReferenceGeometry.tenonFace)
 
     def __set_tenon_or_mortise_size(self,
                                     mesh_object_data: MeshObjectData,
@@ -900,7 +918,8 @@ class HeightAndThicknessSetup:
         max = thickness_properties.type == "max"
         centered = thickness_properties.centered
         if max and not centered:
-            size = face_to_be_transformed.shortest_length - thickness_properties.shoulder_value
+            size = face_to_be_transformed.shortest_length - \
+                thickness_properties.shoulder_value
         else:
             size = thickness_properties.value
 
@@ -920,7 +939,8 @@ class HeightAndThicknessSetup:
         max = height_properties.type == "max"
         centered = height_properties.centered
         if max and not centered:
-            size = face_to_be_transformed.longest_length - height_properties.shoulder_value
+            size = face_to_be_transformed.longest_length - \
+                height_properties.shoulder_value
         else:
             size = height_properties.value
 
@@ -1010,6 +1030,7 @@ class DepthSetup:
 
         # apply rotation to the normal
         matrix_world = mesh_object_data.matrix_world
+        #TODO: put in math_utils
         rot_mat = matrix_world.copy().to_3x3().normalized()
         normal_world = rot_mat * extruded_face.normal
         normal_world = normal_world * depth
@@ -1039,6 +1060,7 @@ class DepthSetup:
         del ret
 
         # apply rotation to the normal
+        #TODO: put in math_utils
         rot_mat = matrix_world.copy().to_3x3().normalized()
         normal_world = rot_mat * face_normal
         normal_world = normal_world * depth

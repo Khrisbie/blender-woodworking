@@ -302,28 +302,30 @@ class TenonOperator(bpy.types.Operator):
             thickness_properties.shoulder_value = \
                 face_to_be_transformed.shortest_length * \
                 thickness_properties.shoulder_percentage
-            if (thickness_properties.shoulder_value +
-                    thickness_properties.value >
-                    face_to_be_transformed.shortest_length):
-                thickness_properties.value = \
-                    face_to_be_transformed.shortest_length - \
-                    thickness_properties.shoulder_value
-                thickness_properties.percentage =\
-                    thickness_properties.value / \
-                    face_to_be_transformed.shortest_length
+            if thickness_properties.type != "max":
+                if (thickness_properties.shoulder_value +
+                        thickness_properties.value >
+                        face_to_be_transformed.shortest_length):
+                    thickness_properties.value = \
+                        face_to_be_transformed.shortest_length - \
+                        thickness_properties.shoulder_value
+                    thickness_properties.percentage =\
+                        thickness_properties.value / \
+                        face_to_be_transformed.shortest_length
 
         if height_properties.shoulder_type == "percentage":
             height_properties.shoulder_value = \
                 face_to_be_transformed.longest_length * \
                 height_properties.shoulder_percentage
-            if (height_properties.shoulder_value + height_properties.value >
-                    face_to_be_transformed.longest_length):
-                height_properties.value = \
-                    face_to_be_transformed.longest_length - \
-                    height_properties.shoulder_value
-                height_properties.percentage = \
-                    height_properties.value / \
-                    face_to_be_transformed.longest_length
+            if height_properties.type != "max":
+                if (height_properties.shoulder_value + height_properties.value >
+                        face_to_be_transformed.longest_length):
+                    height_properties.value = \
+                        face_to_be_transformed.longest_length - \
+                        height_properties.shoulder_value
+                    height_properties.percentage = \
+                        height_properties.value / \
+                        face_to_be_transformed.longest_length
 
         if height_properties.haunched_first_side:
             haunch_properties = height_properties.haunch_first_side
@@ -354,8 +356,14 @@ class TenonOperator(bpy.types.Operator):
                     haunch_properties.depth_percentage
 
         # Check input values
-        total_length = height_properties.shoulder_value + \
-            height_properties.value
+        if height_properties.type != "max":
+            total_length = height_properties.shoulder_value + \
+                height_properties.value
+        elif height_properties.centered:
+            total_length = face_to_be_transformed.longest_length
+        else:
+            total_length = height_properties.shoulder_value
+
         if ((not MathUtils.almost_equal_relative_or_absolute(
                 total_length,
                 face_to_be_transformed.longest_length)) and
@@ -365,8 +373,14 @@ class TenonOperator(bpy.types.Operator):
                         "too long.")
             return {'CANCELLED'}
 
-        total_length = thickness_properties.shoulder_value + \
-            thickness_properties.value
+        if thickness_properties.type != "max":
+            total_length = thickness_properties.shoulder_value + \
+                thickness_properties.value
+        elif thickness_properties.centered:
+            total_length = face_to_be_transformed.shortest_length
+        else:
+            total_length = thickness_properties.shoulder_value
+
         if ((not MathUtils.almost_equal_relative_or_absolute(
                 total_length,
                 face_to_be_transformed.shortest_length)) and
