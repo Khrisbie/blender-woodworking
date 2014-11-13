@@ -4,6 +4,7 @@ from collections import namedtuple
 
 import bmesh
 import bpy
+from mathutils import Vector
 from mathutils.geometry import (intersect_point_line,
                                 distance_point_to_plane,
                                 intersect_line_plane,
@@ -13,6 +14,7 @@ from mathutils.geometry import (intersect_point_line,
 from enum import Enum, IntEnum, unique
 from woodwork.woodwork_math_utils import MathUtils
 from woodwork.woodwork_geom_utils import (GeomUtils,
+                                          VectorUtils,
                                           BBox,
                                           Position)
 
@@ -199,8 +201,7 @@ class FaceToBeTransformed:
 
     # Used by "remove wood" tenon option
     def translate_along_normal(self, bm, matrix_world, depth):
-        #TODO: put in math_utils
-        rot_mat = matrix_world.copy().to_3x3().normalized()
+        rot_mat = GeomUtils.rotation_matrix(matrix_world)
         normal_world = rot_mat * self.face.normal
         normal_world = normal_world * depth
 
@@ -258,7 +259,7 @@ class TenonFace:
 
                             tangent = tenon_edge.calc_tangent(connected_loop)
 
-                            if GeomUtils.same_direction(tangent,
+                            if VectorUtils.are_parallel(tangent,
                                                         longest_side_tangent):
                                 if not max_thickness_centered:
                                     self.height_faces.append(connected_face)
@@ -281,7 +282,7 @@ class TenonFace:
 
             tangent0 = e0.calc_tangent(l0)
 
-            if GeomUtils.same_direction(tangent0,
+            if VectorUtils.are_parallel(tangent0,
                                         shortest_side_tangent):
                 self.one_thickness_edge_to_resize = e0
             else:
@@ -296,7 +297,7 @@ class TenonFace:
 
             tangent0 = e0.calc_tangent(l0)
 
-            if GeomUtils.same_direction(tangent0, longest_side_tangent):
+            if VectorUtils.are_parallel(tangent0, longest_side_tangent):
                 self.one_height_edge_to_resize = e0
             else:
                 self.one_height_edge_to_resize = e1
@@ -306,41 +307,46 @@ class TenonFace:
         v0 = reference_edge.verts[0].co
         v1 = reference_edge.verts[1].co
 
-        v0_world = matrix_world * v0
-        v1_world = matrix_world * v1
-        to_be_resized = (v0_world - v1_world).length
+        vector_to_be_resized = matrix_world * v1 - matrix_world * v0
+        if VectorUtils.is_zero(vector_to_be_resized):
+            scale_factor = resize_value
+        else:
+            scale_factor = resize_value / vector_to_be_resized.length
 
-        return resize_value / to_be_resized
+        return scale_factor
 
     @staticmethod
-    def compute_translation_vector_given_shoulder(reference_edge,
-                                                  shoulder,
-                                                  scale_factor,
-                                                  matrix_world):
-        # Find vector direction
-        direction = shoulder.vector_to_be_resized
+    def compute_translation_vector(reference_edge,
+                                   direction,
+                                   scale_factor,
+                                   matrix_world,
+                                   shoulder_beyond_tenon):
 
         v0 = reference_edge.verts[0].co
         v1 = reference_edge.verts[1].co
 
         vector_to_be_resized = matrix_world * v1 - matrix_world * v0
-        angle = vector_to_be_resized.angle(direction)
-        if reference_edge.is_convex:
-            # shoulder size is larger than actual tenon end
-            if MathUtils.almost_zero(angle):
-                vector_to_be_resized.negate()
-            vector_to_be_resized_inverted = vector_to_be_resized.copy()
-            vector_to_be_resized_inverted.negate()
-
-            final_vector = vector_to_be_resized_inverted * scale_factor
-
-            translate_vector = final_vector + vector_to_be_resized_inverted
+        if VectorUtils.is_zero(vector_to_be_resized):
+            translate_vector = direction.normalized() * scale_factor
         else:
-            if not MathUtils.almost_zero(angle):
-                vector_to_be_resized.negate()
-            final_vector = vector_to_be_resized * scale_factor
+            same_direction = VectorUtils.same_direction(vector_to_be_resized,
+                                                        direction)
+            if shoulder_beyond_tenon:
+                # shoulder size is larger than actual tenon end
+                if same_direction:
+                    vector_to_be_resized.negate()
+                vector_to_be_resized_inverted = vector_to_be_resized.copy()
+                vector_to_be_resized_inverted.negate()
 
-            translate_vector = final_vector - vector_to_be_resized
+                final_vector = vector_to_be_resized_inverted * scale_factor
+
+                translate_vector = final_vector + vector_to_be_resized_inverted
+            else:
+                if not same_direction:
+                    vector_to_be_resized.negate()
+                final_vector = vector_to_be_resized * scale_factor
+
+                translate_vector = final_vector - vector_to_be_resized
 
         return translate_vector
 
@@ -380,8 +386,7 @@ class ShoulderFace:
                 tenon_loop = next(
                     loop for loop in loops if loop.face is tenon_face)
                 direction = common_edge.calc_tangent(tenon_loop)
-                angle = direction.angle(shoulder_direction)
-                if MathUtils.almost_zero(angle):
+                if VectorUtils.same_direction(direction, shoulder_direction):
                     self.face = face
                     break
 
@@ -414,7 +419,7 @@ class ShoulderFace:
                                              loop.face is shoulder_face)
                         tangent = edge.calc_tangent(shoulder_loop)
 
-                        if GeomUtils.same_direction(tangent,
+                        if VectorUtils.are_parallel(tangent,
                                                     up_down_direction):
                             shoulder_faces.append(connected_face)
 
@@ -436,7 +441,7 @@ class ShoulderFace:
 
             tangent0 = e0.calc_tangent(l0)
 
-            if GeomUtils.same_direction(tangent0, up_down_direction):
+            if VectorUtils.are_parallel(tangent0, up_down_direction):
                 edge_to_resize = e0
             else:
                 edge_to_resize = e1
@@ -457,9 +462,8 @@ class ShoulderFace:
         return shoulder_verts.intersection(tenon_verts)
 
     def compute_translation_vector(self, shoulder_value, matrix_world):
-        # just rotate and scale vector to world coordinates
-        #TODO: put in math_utils
-        edge_vector = matrix_world.to_3x3() * self.vector_to_be_resized
+        rotate_scale_world = GeomUtils.rotation_and_scale_matrix(matrix_world)
+        edge_vector = rotate_scale_world * self.vector_to_be_resized
         shoulder_length_to_resize = edge_vector.length
         scale_factor = shoulder_value / shoulder_length_to_resize
         final_vector = edge_vector * scale_factor
@@ -636,7 +640,7 @@ class ThroughMortiseIntersection:
         for vert in self.top_face.verts:
             for edge in vert.link_edges:
                 edge_vect = edge.verts[0].co - edge.verts[1].co
-                if GeomUtils.same_direction(edge_vect, top_face_normal):
+                if VectorUtils.are_parallel(edge_vect, top_face_normal):
                     intersect_edges.append(edge)
                     edge_faces = edge.link_faces
                     for edge_face in edge_faces:
@@ -708,7 +712,7 @@ class HeightAndThicknessSetup:
                 v0 = edge.verts[0]
                 v1 = edge.verts[1]
                 edge_vector = v1.co - v0.co
-                if GeomUtils.same_direction(edge_vector, direction):
+                if VectorUtils.are_parallel(edge_vector, direction):
 
                     center = (v1.co + v0.co) * 0.5
                     signed_distance = distance_point_to_plane(v0.co, center,
@@ -881,12 +885,20 @@ class HeightAndThicknessSetup:
                     faces_to_resize,
                     shoulder_verts_to_translate)
 
+                shoulder_normal = shoulder.face.normal
+                tenon_normal = tenon.face.normal
+                if VectorUtils.same_direction(shoulder_normal, tenon_normal):
+                    shoulder_beyond_tenon = False
+                else:
+                    shoulder_beyond_tenon = True
+
                 translate_vector = \
-                    TenonFace.compute_translation_vector_given_shoulder(
+                    TenonFace.compute_translation_vector(
                         reference_edge,
-                        shoulder,
+                        shoulder.vector_to_be_resized,
                         scale_factor,
-                        mesh_object_data.matrix_world)
+                        mesh_object_data.matrix_world,
+                        shoulder_beyond_tenon)
 
                 bmesh.ops.translate(mesh_object_data.bm,
                                     vec=translate_vector,
@@ -1030,8 +1042,7 @@ class DepthSetup:
 
         # apply rotation to the normal
         matrix_world = mesh_object_data.matrix_world
-        #TODO: put in math_utils
-        rot_mat = matrix_world.copy().to_3x3().normalized()
+        rot_mat = GeomUtils.rotation_matrix(matrix_world)
         normal_world = rot_mat * extruded_face.normal
         normal_world = normal_world * depth
 
@@ -1060,8 +1071,7 @@ class DepthSetup:
         del ret
 
         # apply rotation to the normal
-        #TODO: put in math_utils
-        rot_mat = matrix_world.copy().to_3x3().normalized()
+        rot_mat = GeomUtils.rotation_matrix(matrix_world)
         normal_world = rot_mat * face_normal
         normal_world = normal_world * depth
 
@@ -1098,8 +1108,7 @@ class DepthSetup:
         for loop in extruded_face.loops:
             edge = loop.edge
             tangent = edge.calc_tangent(loop)
-            angle = tangent.angle(still_edge_tangent)
-            if MathUtils.almost_zero(angle):
+            if VectorUtils.same_direction(tangent, still_edge_tangent):
                 # find edge not in extruded_face
                 for vert in edge.verts:
                     link_edges = vert.link_edges
@@ -1182,7 +1191,7 @@ class DepthSetup:
         for edge in reference_face.edges:
             for face in edge.link_faces:
                 if face != reference_face:
-                    if GeomUtils.same_direction(perpendicular_direction,
+                    if VectorUtils.are_parallel(perpendicular_direction,
                                                 face.normal):
                         found.append(face)
                         break
@@ -1280,8 +1289,7 @@ class DepthSetup:
             for loop in edge.link_loops:
                 if loop.face == tenon_top:
                     tangent = edge.calc_tangent(loop)
-                    angle = tangent.angle(side_tangent)
-                    if MathUtils.almost_zero(angle):
+                    if VectorUtils.same_direction(tangent, side_tangent):
                         face_vertices.append(edge.verts[0])
                         face_vertices.append(edge.verts[1])
                         break
@@ -1305,12 +1313,12 @@ class DepthSetup:
     def __find_external_face(top, side_tangent):
         hole_face = None
         for edge in top.edges:
+            #TODO: is_convex don't tell if normals are inside !! Should compare with another normal
             if not edge.is_convex:
                 # deal only with faces with normals inside
                 for face in edge.link_faces:
                     if face is not top:
-                        angle = side_tangent.angle(face.normal)
-                        if MathUtils.almost_zero(angle):
+                        if VectorUtils.same_direction(side_tangent, face.normal):
                             hole_face = face
                             break
                 if hole_face is not None:
@@ -1358,7 +1366,7 @@ class DepthSetup:
             for loop in top_face.loops:
                 edge = loop.edge
                 tangent = edge.calc_tangent(loop)
-                if not GeomUtils.same_direction(tangent, side_tangent):
+                if not VectorUtils.are_parallel(tangent, side_tangent):
                     v0 = loop.vert
                     v1 = loop.link_loop_next.vert
 

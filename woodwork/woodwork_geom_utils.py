@@ -16,7 +16,6 @@ class Position(Enum):
 
 
 class GeomUtils:
-    PARALLEL_VECTORS_ABSOLUTE_ERROR_THRESHOLD = 1.e-5
     POINT_ON_SIDE_ABSOLUTE_ERROR_THRESHOLD = 1.e-4
     POINTS_ARE_NEAR_ABSOLUTE_ERROR_THRESHOLD = 1.e-5
     POINTS_ARE_SAME_ABSOLUTE_ERROR_THRESHOLD = 1.e-6
@@ -33,14 +32,6 @@ class GeomUtils:
             if perp_angle < -error or perp_angle > error:
                 return False
         return True
-
-    @staticmethod
-    def same_direction(vector0, vector1):
-        dir1 = vector0.normalized()
-        dir2 = vector1.normalized()
-        d = abs(dir1.dot(dir2))
-        return MathUtils.almost_equal_absolute(
-            d, 1.0, GeomUtils.PARALLEL_VECTORS_ABSOLUTE_ERROR_THRESHOLD)
 
     @staticmethod
     def distance_point_edge(pt, edge):
@@ -118,6 +109,37 @@ class GeomUtils:
                     dist < GeomUtils.POINTS_ARE_SAME_ABSOLUTE_ERROR_THRESHOLD):
                     same = True
         return same
+
+    @staticmethod
+    def rotation_and_scale_matrix(space):
+        return space.copy().to_3x3()
+
+    @staticmethod
+    def rotation_matrix(space):
+        return space.copy().to_3x3().normalized()
+
+
+class VectorUtils:
+    PARALLEL_VECTORS_ABSOLUTE_ERROR_THRESHOLD = 1.e-5
+
+    @staticmethod
+    def are_parallel(vector0, vector1):
+        dir1 = vector0.normalized()
+        dir2 = vector1.normalized()
+        d = abs(dir1.dot(dir2))
+        return MathUtils.almost_equal_absolute(
+            d, 1.0, VectorUtils.PARALLEL_VECTORS_ABSOLUTE_ERROR_THRESHOLD)
+
+    @staticmethod
+    def same_direction(vector0, vector1):
+        return MathUtils.almost_zero(vector0.angle(vector1))
+
+    @staticmethod
+    def is_zero(vector, tolerance=MathUtils.ZERO_TOLERANCE):
+        return abs(vector[0]) < tolerance and \
+            abs(vector[1]) < tolerance and \
+            abs(vector[2]) < tolerance
+
 
 class BBox:
     def __init__(self, min_values: Vector, max_values: Vector):
