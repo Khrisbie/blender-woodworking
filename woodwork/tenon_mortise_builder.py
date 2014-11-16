@@ -31,6 +31,7 @@ class ReferenceGeometry(IntEnum):
     edgeToRaise = 7
     haunchAdjacentEdge = 8
     tenonFace = 9
+    tenonAdjacentFaces = 100
 
 
 # Use bmesh layers to retrieve faces
@@ -57,6 +58,25 @@ class GeometryRetriever:
                     f[self.face_retriever] = 0
                 break
         return found
+
+    def save_faces(self, faces, reference_geometry_start):
+        for idx, face in enumerate(faces):
+            face[self.face_retriever] = int(reference_geometry_start) + idx
+
+    def retrieve_faces(self, reference_geometry_start,
+                             max_count):
+        found_faces = dict()
+        min_int = int(reference_geometry_start)
+        max_int = min_int + max_count
+        for f in self.bm.faces:
+            val = f[self.face_retriever]
+            if int(reference_geometry_start) <= val < max_int:
+                found_faces[val - min_int] = f
+                f[self.face_retriever] = 0
+        result_list = []
+        for key in sorted(found_faces):
+            result_list.append(found_faces[key])
+        return result_list
 
     def save_edge(self, edge, reference_geometry):
         edge[self.edge_retriever] = int(reference_geometry)
@@ -217,16 +237,12 @@ class TenonFace:
         self.face = face
         self.thickness_faces = []
         self.height_faces = []
-        self.one_thickness_edge_to_resize = None
-        self.one_height_edge_to_resize = None
 
     # find tenon adjacent faces to be translated or resized given user's values
     # - height_faces[] are the faces which follows the direction of the
     # longest side
     # - thickness_faces[] are the faces which follows the direction of the
     # shortest side
-    # - thickness_reference_edge and height_reference_edge are tenon edges used
-    # to determine scale factor
     def find_adjacent_faces(self,
                             face_to_be_transformed,
                             height_properties,
@@ -237,7 +253,6 @@ class TenonFace:
         self.height_faces.append(tenon)
 
         longest_side_tangent = face_to_be_transformed.longest_side_tangent
-        shortest_side_tangent = face_to_be_transformed.shortest_side_tangent
 
         max_height_centered = bool(
             height_properties.type == "max" and
@@ -247,12 +262,11 @@ class TenonFace:
             thickness_properties.centered is True)
 
         # Find faces to resize to obtain tenon base
-        tenon_edges = tenon.edges
-        for tenon_edge in tenon_edges:
+        for tenon_edge in tenon.edges:
             connected_faces = tenon_edge.link_faces
             for connected_face in connected_faces:
                 if connected_face != tenon:
-                    # Found face adjacent to tenon
+                    # Face adjacent to tenon
                     connected_loops = tenon_edge.link_loops
                     for connected_loop in connected_loops:
                         if connected_loop.face == connected_face:
@@ -261,71 +275,48 @@ class TenonFace:
 
                             if VectorUtils.are_parallel(tangent,
                                                         longest_side_tangent):
+                                # faces to set height
                                 if not max_thickness_centered:
                                     self.height_faces.append(connected_face)
 
-                                    if self.one_height_edge_to_resize is None:
-                                        self.one_height_edge_to_resize = tenon_edge
                             else:
+                                # faces to set thickness
                                 if not max_height_centered:
                                     self.thickness_faces.append(connected_face)
 
-                                    if self.one_thickness_edge_to_resize is None:
-                                        self.one_thickness_edge_to_resize = tenon_edge
+    def get_vector_to_be_resized(self, resize_direction):
+        tenon = self.face
+        for loop in tenon.loops:
+            edge = loop.edge
+            tangent = edge.calc_tangent(loop)
+            if not VectorUtils.are_parallel(tangent, resize_direction):
+                pt1 = edge.verts[1]
+                pt0 = edge.verts[0]
 
-        if max_height_centered:
-            # get tenon side facing the smallest side
-            l0 = tenon.loops[0]
-            e0 = l0.edge
-            l1 = tenon.loops[1]
-            e1 = l1.edge
-
-            tangent0 = e0.calc_tangent(l0)
-
-            if VectorUtils.are_parallel(tangent0,
-                                        shortest_side_tangent):
-                self.one_thickness_edge_to_resize = e0
-            else:
-                self.one_thickness_edge_to_resize = e1
-
-        elif max_thickness_centered:
-            # get tenon side facing the longest side
-            l0 = tenon.loops[0]
-            e0 = l0.edge
-            l1 = tenon.loops[1]
-            e1 = l1.edge
-
-            tangent0 = e0.calc_tangent(l0)
-
-            if VectorUtils.are_parallel(tangent0, longest_side_tangent):
-                self.one_height_edge_to_resize = e0
-            else:
-                self.one_height_edge_to_resize = e1
+                vector_to_be_resized = pt1.co - pt0.co
+        return vector_to_be_resized
 
     @staticmethod
-    def get_scale_factor(reference_edge, matrix_world, resize_value):
-        v0 = reference_edge.verts[0].co
-        v1 = reference_edge.verts[1].co
+    def get_scale_factor(vector_to_be_resized, matrix_world, resize_value):
+        rotate_scale_world = GeomUtils.rotation_and_scale_matrix(matrix_world)
+        world_vector = rotate_scale_world * vector_to_be_resized
 
-        vector_to_be_resized = matrix_world * v1 - matrix_world * v0
-        if VectorUtils.is_zero(vector_to_be_resized):
+        if VectorUtils.is_zero(world_vector):
             scale_factor = resize_value
         else:
-            scale_factor = resize_value / vector_to_be_resized.length
+            scale_factor = resize_value / world_vector.length
 
         return scale_factor
 
     @staticmethod
-    def compute_translation_vector(reference_edge,
+    def compute_translation_vector(local_vector_to_be_resized,
                                    direction,
                                    scale_factor,
                                    matrix_world,
                                    shoulder_beyond_tenon):
+        rotate_scale_world = GeomUtils.rotation_and_scale_matrix(matrix_world)
+        vector_to_be_resized = rotate_scale_world * local_vector_to_be_resized
 
-        v0 = reference_edge.verts[0].co
-        v1 = reference_edge.verts[1].co
-
-        vector_to_be_resized = matrix_world * v1 - matrix_world * v0
         if VectorUtils.is_zero(vector_to_be_resized):
             translate_vector = direction.normalized() * scale_factor
         else:
@@ -855,7 +846,6 @@ class HeightAndThicknessSetup:
     def __set_tenon_or_mortise_size_on_given_side(
             self,
             mesh_object_data: MeshObjectData,
-            reference_edge,
             faces_to_resize,
             direction,
             max,
@@ -865,8 +855,9 @@ class HeightAndThicknessSetup:
             tenon: TenonFace):
 
         if not (max and centered):
+            vector_to_be_resized = tenon.get_vector_to_be_resized(direction)
             scale_factor = TenonFace.get_scale_factor(
-                reference_edge,
+                vector_to_be_resized,
                 mesh_object_data.matrix_world,
                 size)
 
@@ -894,7 +885,7 @@ class HeightAndThicknessSetup:
 
                 translate_vector = \
                     TenonFace.compute_translation_vector(
-                        reference_edge,
+                        vector_to_be_resized,
                         shoulder.vector_to_be_resized,
                         scale_factor,
                         mesh_object_data.matrix_world,
@@ -909,16 +900,11 @@ class HeightAndThicknessSetup:
                 # shoulder on the other side. This operation re-order faces ids
                 # (tenon and adjacent faces on given side).
                 if max:
-                    self.geometry_retriever.save_face(
-                        tenon.face,
-                        ReferenceGeometry.tenonFace)
                     merge_threshold = \
                         GeomUtils.POINTS_ARE_NEAR_ABSOLUTE_ERROR_THRESHOLD
                     bmesh.ops.automerge(mesh_object_data.bm,
                                         verts=list(verts_to_translate),
                                         dist=merge_threshold)
-                    tenon.face = self.geometry_retriever.retrieve_face(
-                        ReferenceGeometry.tenonFace)
 
     def __set_tenon_or_mortise_size(self,
                                     mesh_object_data: MeshObjectData,
@@ -935,9 +921,19 @@ class HeightAndThicknessSetup:
         else:
             size = thickness_properties.value
 
+        if max:
+            self.geometry_retriever.save_faces(
+                tenon.height_faces,
+                ReferenceGeometry.tenonAdjacentFaces
+            )
+            if not height_properties.centered:
+                shoulder, shoulder_verts_to_translate = self.height_shoulder_resize_settings
+                self.geometry_retriever.save_face(
+                    shoulder.face,
+                    ReferenceGeometry.firstHeightShoulder
+                )
         self.__set_tenon_or_mortise_size_on_given_side(
             mesh_object_data,
-            tenon.one_thickness_edge_to_resize,
             tenon.thickness_faces,
             face_to_be_transformed.longest_side_tangent,
             max,
@@ -946,6 +942,14 @@ class HeightAndThicknessSetup:
             self.thickness_shoulder_resize_settings,
             tenon
         )
+        if max:
+            tenon.height_faces = self.geometry_retriever.retrieve_faces(
+                ReferenceGeometry.tenonAdjacentFaces, 3)
+            tenon.face = tenon.height_faces[0]
+            if not height_properties.centered:
+                shoulder.face = self.geometry_retriever.retrieve_face(
+                    ReferenceGeometry.firstHeightShoulder
+                )
 
         # Set tenon height
         max = height_properties.type == "max"
@@ -956,9 +960,13 @@ class HeightAndThicknessSetup:
         else:
             size = height_properties.value
 
+        if max:
+            self.geometry_retriever.save_face(
+                tenon.face,
+                ReferenceGeometry.tenonFace
+            )
         self.__set_tenon_or_mortise_size_on_given_side(
             mesh_object_data,
-            tenon.one_height_edge_to_resize,
             tenon.height_faces,
             face_to_be_transformed.shortest_side_tangent,
             max,
@@ -967,6 +975,9 @@ class HeightAndThicknessSetup:
             self.height_shoulder_resize_settings,
             tenon
         )
+        if max:
+            tenon.face = self.geometry_retriever.retrieve_face(
+                ReferenceGeometry.tenonFace)
 
     def set_size(self,
                  mesh_object_data: MeshObjectData,
