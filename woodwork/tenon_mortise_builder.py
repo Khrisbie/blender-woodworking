@@ -320,7 +320,7 @@ class TenonFace:
         if VectorUtils.is_zero(vector_to_be_resized):
             translate_vector = direction.normalized() * scale_factor
         else:
-            same_direction = VectorUtils.same_direction(vector_to_be_resized,
+            same_direction = VectorUtils.same_direction(local_vector_to_be_resized,
                                                         direction)
             if shoulder_beyond_tenon:
                 # shoulder size is larger than actual tenon end
