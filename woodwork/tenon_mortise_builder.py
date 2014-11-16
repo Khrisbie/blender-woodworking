@@ -285,15 +285,34 @@ class TenonFace:
                                     self.thickness_faces.append(connected_face)
 
     def get_vector_to_be_resized(self, resize_direction):
+        vector_to_be_resized = None
         tenon = self.face
+        nearest_angle = 2 * pi
         for loop in tenon.loops:
             edge = loop.edge
             tangent = edge.calc_tangent(loop)
-            if not VectorUtils.are_parallel(tangent, resize_direction):
+            angle = tangent.angle(resize_direction)
+            if MathUtils.almost_equal_relative_or_absolute(angle, pi/2) or \
+                    MathUtils.almost_equal_relative_or_absolute(angle, 1.5 * pi):
                 pt1 = edge.verts[1]
                 pt0 = edge.verts[0]
 
                 vector_to_be_resized = pt1.co - pt0.co
+                break
+            else:
+                if abs(angle - (pi / 2.0)) or \
+                        abs(angle - (1.5 * pi)) < nearest_angle:
+                    if abs(angle - (pi / 2.0)) < nearest_angle:
+                        nearest_angle = abs(angle - (pi / 2.0))
+                    else:
+                        nearest_angle = abs(angle - (1.5 * pi))
+                    nearest_edge = edge
+
+        if vector_to_be_resized is None:
+            # very small vector (shoulder is on tenon end)
+            pt1 = nearest_edge.verts[1]
+            pt0 = nearest_edge.verts[0]
+            vector_to_be_resized = pt1.co - pt0.co
         return vector_to_be_resized
 
     @staticmethod
@@ -318,7 +337,8 @@ class TenonFace:
         vector_to_be_resized = rotate_scale_world * local_vector_to_be_resized
 
         if VectorUtils.is_zero(vector_to_be_resized):
-            translate_vector = direction.normalized() * scale_factor
+            world_direction = rotate_scale_world * direction
+            translate_vector = world_direction.normalized() * scale_factor
         else:
             same_direction = VectorUtils.same_direction(local_vector_to_be_resized,
                                                         direction)
