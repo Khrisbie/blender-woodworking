@@ -18,7 +18,7 @@ from woodwork.woodwork_geom_utils import (GeomUtils,
                                           BBox,
                                           Position)
 
-
+#TODO : handle mortise with 0 length shoulder (sort of inverted max)
 # Used to retrieve faces when geometry has been deleted and faces reordered
 @unique
 class ReferenceGeometry(IntEnum):
@@ -300,7 +300,7 @@ class TenonFace:
                 vector_to_be_resized = pt1.co - pt0.co
                 break
             else:
-                if abs(angle - (pi / 2.0)) or \
+                if abs(angle - (pi / 2.0)) < nearest_angle or \
                         abs(angle - (1.5 * pi)) < nearest_angle:
                     if abs(angle - (pi / 2.0)) < nearest_angle:
                         nearest_angle = abs(angle - (pi / 2.0))
@@ -935,6 +935,14 @@ class HeightAndThicknessSetup:
         # Set tenon thickness
         max = thickness_properties.type == "max"
         centered = thickness_properties.centered
+        if not centered and not max:
+            shoulder_and_tenon_length = thickness_properties.shoulder_value + \
+                thickness_properties.value
+            if MathUtils.almost_equal_relative_or_absolute(
+                    shoulder_and_tenon_length,
+                    face_to_be_transformed.shortest_length
+            ):
+                max = True
         if max and not centered:
             size = face_to_be_transformed.shortest_length - \
                 thickness_properties.shoulder_value
@@ -974,6 +982,14 @@ class HeightAndThicknessSetup:
         # Set tenon height
         max = height_properties.type == "max"
         centered = height_properties.centered
+        if not centered and not max:
+            shoulder_and_tenon_length = height_properties.shoulder_value + \
+                height_properties.value
+            if MathUtils.almost_equal_relative_or_absolute(
+                    shoulder_and_tenon_length,
+                    face_to_be_transformed.longest_length
+            ):
+                max = True
         if max and not centered:
             size = face_to_be_transformed.longest_length - \
                 height_properties.shoulder_value
@@ -1623,6 +1639,16 @@ class DepthSetup:
 
             max = thickness_properties.type == "max"
             centered = thickness_properties.centered
+
+            if not centered and not max:
+                shoulder_and_tenon_length = thickness_properties.shoulder_value + \
+                    thickness_properties.value
+                if MathUtils.almost_equal_relative_or_absolute(
+                        shoulder_and_tenon_length,
+                        face_to_be_transformed.shortest_length
+                ):
+                    max = True
+
             if max:
                 side_tangent = \
                     face_to_be_transformed.longest_side_tangent.copy()
@@ -1655,6 +1681,16 @@ class DepthSetup:
 
             max = height_properties.type == "max"
             centered = height_properties.centered
+
+            if not centered and not max:
+                shoulder_and_tenon_length = height_properties.shoulder_value + \
+                    height_properties.value
+                if MathUtils.almost_equal_relative_or_absolute(
+                        shoulder_and_tenon_length,
+                        face_to_be_transformed.longest_length
+                ):
+                    max = True
+
             if max:
                 side_tangent = \
                     face_to_be_transformed.shortest_side_tangent.copy()
