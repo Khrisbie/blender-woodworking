@@ -230,9 +230,6 @@ def register():
     bpy.utils.register_class(MortiseHeightPropertyGroup)
     bpy.utils.register_class(MortisePropertyGroup)
 
-    bpy.types.Scene.mortiseProperties = bpy.props.PointerProperty(
-        type=MortisePropertyGroup)
-
 
 def unregister():
     bpy.utils.unregister_class(MortisePropertyGroup)
@@ -240,7 +237,6 @@ def unregister():
     bpy.utils.unregister_class(MortiseThicknessPropertyGroup)
     bpy.utils.unregister_class(MortiseHaunch)
 
-    del bpy.types.Scene.mortiseProperties
 
 # ----------------------------------------------
 # Code to run the script alone

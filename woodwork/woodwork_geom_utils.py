@@ -1,11 +1,10 @@
-from sys import float_info
 from enum import Enum
 from math import pi
 
 from mathutils import Vector
 from mathutils.geometry import intersect_point_line
 
-from woodwork.woodwork_math_utils import MathUtils
+from . woodwork_math_utils import MathUtils
 
 
 class Position(Enum):

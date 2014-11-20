@@ -1,10 +1,10 @@
 import bpy
 
 
-class JointsPanel(bpy.types.Panel):
+class ComponentsPanel(bpy.types.Panel):
 
-    bl_label = "Woodworking joints"
-    bl_idname = "woodworking_joints_panel"
+    bl_label = "Woodworking components"
+    bl_idname = "woodworking_components_panel"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'TOOLS'
     bl_category = 'Woodworking'
@@ -14,16 +14,15 @@ class JointsPanel(bpy.types.Panel):
 
         box = layout.box()
         row = box.row()
-        row.operator("mesh.woodwork_tenon")
-        row.operator("mesh.woodwork_mortise")
+        row.operator("mesh.woodwork_workpiece")
 
 
 def register():
-    bpy.utils.register_class(JointsPanel)
+    bpy.utils.register_class(ComponentsPanel)
 
 
 def unregister():
-    bpy.utils.unregister_class(JointsPanel)
+    bpy.utils.unregister_class(ComponentsPanel)
 
 if __name__ == "__main__":
     register()

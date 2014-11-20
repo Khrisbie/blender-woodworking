@@ -10,24 +10,41 @@ bl_info = {
     "wiki_url": "https://github.com/Khrisbie/blender-woodworking",
     "category": "Mesh"}
 
+
 # import files in package
 if "bpy" in locals():
     print("Reloading WoodWorking v %d.%d" % bl_info["version"])
     import imp
+
     imp.reload(mortise_properties)
     imp.reload(mortise)
     imp.reload(tenon_properties)
     imp.reload(tenon)
     imp.reload(joints_panel)
+
+    imp.reload(piece_properties)
+    imp.reload(piece)
+    imp.reload(components_panel)
+
+    imp.reload(scene_woodwork)
+
     imp.reload(translations)
 
 else:
     print("Loading WoodWorking v %d.%d" % bl_info["version"])
+
     from . import mortise_properties
     from . import mortise
     from . import tenon_properties
     from . import tenon
     from . import joints_panel
+
+    from . import piece_properties
+    from . import piece
+    from . import components_panel
+
+    from . import scene_woodwork
+
     from . import translations
 
 
@@ -38,11 +55,25 @@ def register():
     mortise_properties.register()
     mortise.register()
     joints_panel.register()
+
+    piece_properties.register()
+    piece.register()
+    components_panel.register()
+
+    scene_woodwork.register()
+
     translations.register(__name__)
 
 
 def unregister():
     translations.unregister(__name__)
+
+    scene_woodwork.unregister()
+
+    components_panel.unregister()
+    piece.unregister()
+    piece_properties.unregister()
+
     joints_panel.unregister()
     mortise.unregister()
     mortise_properties.unregister()

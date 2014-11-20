@@ -12,11 +12,11 @@ from mathutils.geometry import (intersect_point_line,
                                 normal,
                                 intersect_ray_tri)
 from enum import Enum, IntEnum, unique
-from woodwork.woodwork_math_utils import MathUtils
-from woodwork.woodwork_geom_utils import (GeomUtils,
-                                          VectorUtils,
-                                          BBox,
-                                          Position)
+from . woodwork_math_utils import MathUtils
+from . woodwork_geom_utils import (GeomUtils,
+                                   VectorUtils,
+                                   BBox,
+                                   Position)
 
 #TODO : handle mortise with 0 length shoulder (sort of inverted max)
 # Used to retrieve faces when geometry has been deleted and faces reordered

@@ -1,15 +1,16 @@
 import bpy
 import bmesh
-from woodwork.tenon_mortise_builder import (TenonMortiseBuilder,
-                                            FaceToBeTransformed)
-from woodwork.woodwork_geom_utils import GeomUtils
-from woodwork.woodwork_math_utils import MathUtils
+from . tenon_mortise_builder import (TenonMortiseBuilder,
+                                     FaceToBeTransformed)
+from . woodwork_geom_utils import GeomUtils
+from . woodwork_math_utils import MathUtils
 
 
 class TenonOperator(bpy.types.Operator):
     bl_description = "Creates a tenon given a face"
-    bl_idname = "mesh.tenon"
+    bl_idname = "mesh.woodwork_tenon"
     bl_label = "Tenon"
+    bl_category = 'Woodwork'
     bl_options = {'REGISTER', 'UNDO'}
 
     #
@@ -154,7 +155,7 @@ class TenonOperator(bpy.types.Operator):
     def draw(self, context):
         layout = self.layout
 
-        tenon_properties = context.scene.tenonProperties
+        tenon_properties = context.scene.woodwork.tenon_properties
         thickness_properties = tenon_properties.thickness_properties
         height_properties = tenon_properties.height_properties
 
@@ -196,7 +197,7 @@ class TenonOperator(bpy.types.Operator):
 
     def execute(self, context):
 
-        tenon_properties = context.scene.tenonProperties
+        tenon_properties = context.scene.woodwork.tenon_properties
         thickness_properties = tenon_properties.thickness_properties
         height_properties = tenon_properties.height_properties
 
