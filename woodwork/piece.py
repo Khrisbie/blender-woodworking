@@ -1,4 +1,14 @@
 import bpy
+import bmesh
+from mathutils import (
+    Matrix,
+    Vector
+)
+
+from . piece_properties import (
+    WorkpiecePropertyGroup,
+    WorkpieceSize
+)
 
 
 class WorkpieceOperator(bpy.types.Operator):
@@ -6,7 +16,7 @@ class WorkpieceOperator(bpy.types.Operator):
     bl_idname = "mesh.woodwork_workpiece"
     bl_label = "Workpiece"
     bl_category = 'Woodwork'
-    bl_options = {'REGISTER', 'UNDO'}
+    bl_options = {'REGISTER', 'UNDO', 'PRESET'}
 
     #
     # Class variables
@@ -16,9 +26,59 @@ class WorkpieceOperator(bpy.types.Operator):
     expand_position_properties = bpy.props.BoolProperty(name="Expand",
                                                         default=True)
 
+    piece_properties = bpy.props.PointerProperty(type=WorkpiecePropertyGroup)
+
+    @staticmethod
+    def create_piece(piece_size: WorkpieceSize) -> bmesh.types.BMesh:
+        mesh = bmesh.new()
+
+        len_offset = piece_size.length / 2.0
+        width_offset = piece_size.width / 2.0
+        thickness_offset = piece_size.thickness / 2.0
+
+        coords = ((-len_offset, -width_offset, -thickness_offset),
+                  (len_offset, -width_offset, -thickness_offset),
+                  (-len_offset, width_offset, -thickness_offset),
+                  (len_offset, width_offset, -thickness_offset),
+                  (-len_offset, -width_offset, thickness_offset),
+                  (len_offset, -width_offset, thickness_offset),
+                  (-len_offset, width_offset, thickness_offset),
+                  (len_offset, width_offset, thickness_offset))
+
+        verts = []
+        for co in coords:
+            verts.append(mesh.verts.new(co))
+
+        sides = ((0, 2, 3, 1),
+                 (4, 5, 7, 6),
+                 (0, 4, 5, 1),
+                 (1, 3, 7, 5),
+                 (3, 7, 6, 2),
+                 (2, 0, 4, 6))
+        for side in sides:
+            side_verts = [verts[i] for i in side]
+            mesh.faces.new(side_verts)
+
+        return mesh
+
+
     def execute(self, context):
         if bpy.context.mode == "OBJECT":
 
+            scene = context.scene
+            for ob in scene.objects:
+                ob.select = False
+            mesh = bpy.data.meshes.new("Workpiece")
+            object = bpy.data.objects.new("Workpiece", mesh)
+            object.location = scene.cursor_location
+            base = scene.objects.link(object)
+            base.select = True
+
+            piece_properties = self.piece_properties
+            piece_mesh = WorkpieceOperator.create_piece(piece_properties.size_properties)
+            piece_mesh.to_mesh(mesh)
+            mesh.update()
+            scene.objects.active = object
             return {'FINISHED'}
         else:
             self.report({'WARNING'}, "Woodworking: Option only valid in Object mode")
@@ -49,7 +109,7 @@ class WorkpieceOperator(bpy.types.Operator):
     def draw(self, context):
         layout = self.layout
 
-        piece_properties = context.scene.woodwork.piece_properties
+        piece_properties = self.piece_properties
         size_properties = piece_properties.size_properties
         position_properties = piece_properties.position_properties
 

@@ -1,13 +1,12 @@
-import bpy
-from bpy.props import *
+import bpy.types
+import bpy.utils
+import bpy.props
 
-from . piece_properties import WorkpiecePropertyGroup
 from . tenon_properties import TenonPropertyGroup
 from . mortise_properties import MortisePropertyGroup
 
 
 class SceneWoodworkProperties(bpy.types.PropertyGroup):
-    piece_properties = bpy.props.PointerProperty(type=WorkpiecePropertyGroup)
     tenon_properties = bpy.props.PointerProperty(type=TenonPropertyGroup)
     mortise_properties = bpy.props.PointerProperty(type=MortisePropertyGroup)
 

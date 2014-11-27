@@ -1,41 +1,48 @@
-import bpy
-from bpy.props import *
+import bpy.utils
+from bpy.props import (
+    FloatProperty,
+    EnumProperty,
+    PointerProperty
+)
+from bpy.types import (
+    PropertyGroup
+)
 
 
-class WorkpieceSize(bpy.types.PropertyGroup):
-    thickness = bpy.props.FloatProperty(
+class WorkpieceSize(PropertyGroup):
+    thickness = FloatProperty(
         name="Thickness",
         description="Thickness value",
         min=0.0,
-        default=-1.0,
+        default=0.02,
         subtype='DISTANCE',
         unit='LENGTH',
-        precision=3,
-        step=0.1)
+        precision=4,
+        step=0.01)
 
-    length = bpy.props.FloatProperty(
+    length = FloatProperty(
         name="Length",
         description="Length value",
         min=0.0,
-        default=-1.0,
+        default=0.2,
         subtype='DISTANCE',
         unit='LENGTH',
-        precision=3,
-        step=0.1)
+        precision=4,
+        step=0.01)
 
-    width = bpy.props.FloatProperty(
+    width = FloatProperty(
         name="Width",
         description="Width value",
         min=0.0,
-        default=-1.0,
+        default=0.05,
         subtype='DISTANCE',
         unit='LENGTH',
-        precision=3,
-        step=0.1)
+        precision=4,
+        step=0.01)
 
 
-class WorkpiecePosition(bpy.types.PropertyGroup):
-    visible_surface = bpy.props.EnumProperty(
+class WorkpiecePosition(PropertyGroup):
+    visible_surface = EnumProperty(
         items=[('edge grain',
                 "Edge grain",
                 "Set side of the board as front face"),
@@ -49,7 +56,7 @@ class WorkpiecePosition(bpy.types.PropertyGroup):
         name="Visible surface",
         default='face grain')
 
-    orientation = bpy.props.EnumProperty(
+    orientation = EnumProperty(
         items=[('horizontal',
                 "Horizontal",
                 "Put visible surface horizontally"),
@@ -60,7 +67,7 @@ class WorkpiecePosition(bpy.types.PropertyGroup):
         name="Orientation",
         default='horizontal')
 
-    view = bpy.props.EnumProperty(
+    view = EnumProperty(
         items=[('top',
                 "Top",
                 "Put visible surface in top view"),
@@ -78,11 +85,9 @@ class WorkpiecePosition(bpy.types.PropertyGroup):
         default='front')
 
 
-class WorkpiecePropertyGroup(bpy.types.PropertyGroup):
-    size_properties = bpy.props.PointerProperty(
-        type=WorkpieceSize)
-    position_properties = bpy.props.PointerProperty(
-        type=WorkpiecePosition)
+class WorkpiecePropertyGroup(PropertyGroup):
+    size_properties = PointerProperty(type=WorkpieceSize)
+    position_properties = PointerProperty(type=WorkpiecePosition)
 
 
 def register():
