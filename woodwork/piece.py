@@ -59,9 +59,12 @@ class WorkpieceOperator(bpy.types.Operator):
                  (1, 3, 7, 5),
                  (3, 7, 6, 2),
                  (2, 0, 4, 6))
+        faces = []
         for side in sides:
             side_verts = [verts[i] for i in side]
-            mesh.faces.new(side_verts)
+            faces.append(mesh.faces.new(side_verts))
+
+        bmesh.ops.recalc_face_normals(mesh, faces=faces)
 
         return mesh
 
