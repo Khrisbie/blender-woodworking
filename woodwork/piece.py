@@ -1,8 +1,12 @@
 import bpy
 import bmesh
+from math import (
+    radians
+)
 from mathutils import (
     Matrix,
-    Vector
+    Vector,
+    Quaternion
 )
 
 from . piece_properties import (
@@ -61,6 +65,38 @@ class WorkpieceOperator(bpy.types.Operator):
 
         return mesh
 
+    @staticmethod
+    def visible_surface_rotation(visible_surface):
+        rotations = []
+        if visible_surface == "edge grain":
+            rotations.append(Quaternion((1.0, 0.0, 0.0), radians(90.0)))
+        elif visible_surface == "end grain":
+            rotations.append(Quaternion((1.0, 0.0, 0.0), radians(90.0)))
+            rotations.append(Quaternion((0.0, 1.0, 0.0), radians(90.0)))
+        return rotations
+
+    @staticmethod
+    def orientation_rotation(orientation):
+        rotations = []
+        if orientation == "vertical":
+            rotations.append(Quaternion((0.0, 0.0, 1.0), radians(90.0)))
+        return rotations
+
+    @staticmethod
+    def view_rotation(context, view):
+        rotations = []
+        if view == "front":
+            rotations.append(Quaternion((1.0, 0.0, 0.0), radians(90.0)))
+        elif view == "right":
+            rotations.append(Quaternion((1.0, 0.0, 0.0), radians(90.0)))
+            rotations.append(Quaternion((0.0, 0.0, 1.0), radians(90.0)))
+        elif view == "align":
+            space_data = context.space_data
+            if space_data and space_data.type != 'VIEW_3D':
+                space_data = None
+            if space_data:
+                rotations.append(space_data.region_3d.view_rotation)
+        return rotations
 
     def execute(self, context):
         if bpy.context.mode == "OBJECT":
@@ -76,7 +112,29 @@ class WorkpieceOperator(bpy.types.Operator):
 
             piece_properties = self.piece_properties
             piece_mesh = WorkpieceOperator.create_piece(piece_properties.size_properties)
+
+            position_properties = piece_properties.position_properties
+
+            visible = WorkpieceOperator.visible_surface_rotation(position_properties.visible_surface)
+            orientation = WorkpieceOperator.orientation_rotation(position_properties.orientation)
+            view = WorkpieceOperator.view_rotation(context, position_properties.view)
+
+            for rotation in visible:
+              bmesh.ops.transform(piece_mesh,
+                                  matrix=rotation.to_matrix(),
+                                  verts=piece_mesh.verts)
+            for rotation in orientation:
+              bmesh.ops.transform(piece_mesh,
+                                  matrix=rotation.to_matrix(),
+                                  verts=piece_mesh.verts)
+            for rotation in view:
+              bmesh.ops.transform(piece_mesh,
+                                  matrix=rotation.to_matrix(),
+                                  verts=piece_mesh.verts)
+
             piece_mesh.to_mesh(mesh)
+            piece_mesh.free()
+
             mesh.update()
             scene.objects.active = object
             return {'FINISHED'}
