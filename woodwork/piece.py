@@ -105,11 +105,14 @@ class WorkpieceOperator(bpy.types.Operator):
         if bpy.context.mode == "OBJECT":
 
             scene = context.scene
-            for ob in scene.objects:
-                ob.select = False
+
+            # save selected object
+            selected_objects = context.selected_objects
+            if len(selected_objects) > 0:
+                for ob in scene.objects:
+                    ob.select = False
             mesh = bpy.data.meshes.new("Workpiece")
             object = bpy.data.objects.new("Workpiece", mesh)
-            object.location = scene.cursor_location
             base = scene.objects.link(object)
             base.select = True
 
@@ -123,17 +126,28 @@ class WorkpieceOperator(bpy.types.Operator):
             view = WorkpieceOperator.view_rotation(context, position_properties.view)
 
             for rotation in visible:
-              bmesh.ops.transform(piece_mesh,
-                                  matrix=rotation.to_matrix(),
-                                  verts=piece_mesh.verts)
+                bmesh.ops.transform(piece_mesh,
+                                    matrix=rotation.to_matrix(),
+                                    verts=piece_mesh.verts)
             for rotation in orientation:
-              bmesh.ops.transform(piece_mesh,
-                                  matrix=rotation.to_matrix(),
-                                  verts=piece_mesh.verts)
+                bmesh.ops.transform(piece_mesh,
+                                    matrix=rotation.to_matrix(),
+                                    verts=piece_mesh.verts)
             for rotation in view:
-              bmesh.ops.transform(piece_mesh,
-                                  matrix=rotation.to_matrix(),
-                                  verts=piece_mesh.verts)
+                bmesh.ops.transform(piece_mesh,
+                                    matrix=rotation.to_matrix(),
+                                    verts=piece_mesh.verts)
+
+            if position_properties.origin_location == "3D cursor":
+                object.location = scene.cursor_location
+            elif position_properties.origin_location == "position":
+                object.location = position_properties.location_coordinates
+            elif position_properties.origin_location == "selected":
+                if len(selected_objects) == 1:
+                    selected = selected_objects[0]
+                    object.location = selected.location + Vector(position_properties.distance)
+                else:
+                    self.report({'WARNING'}, "Woodworking: One object should be selected")
 
             piece_mesh.to_mesh(mesh)
             piece_mesh.free()
@@ -157,15 +171,28 @@ class WorkpieceOperator(bpy.types.Operator):
         size_box.prop(size_properties, "width", text="")
 
     @staticmethod
+    def __draw_location_properties(position_box, position_properties):
+        position_box.label(text="Origin location")
+        position_box.prop(position_properties, "origin_location", text="")
+
+        if position_properties.origin_location == "position":
+            position_box.label(text="Coordinates", icon='MANIPUL')
+            position_box.prop(position_properties, "location_coordinates", text="")
+        elif position_properties.origin_location == "selected":
+            position_box.label(text="Distance", icon='ARROW_LEFTRIGHT')
+            position_box.prop(position_properties, "distance", text="")
+
+    @staticmethod
     def __draw_position_properties(layout, position_properties):
         position_box = layout.box()
 
-        position_box.label(text="Visible face")
+        position_box.label(text="Visible face", icon="SNAP_FACE")
         position_box.prop(position_properties, "visible_surface", text="")
-        position_box.label(text="Orientation")
+        position_box.label(text="Orientation", icon="FILE_REFRESH")
         position_box.prop(position_properties, "orientation", text="")
-        position_box.label(text="View")
+        position_box.label(text="View", icon="RESTRICT_VIEW_OFF")
         position_box.prop(position_properties, "view", text="")
+        WorkpieceOperator.__draw_location_properties(position_box, position_properties)
 
     def draw(self, context):
         layout = self.layout

@@ -2,7 +2,8 @@ import bpy.utils
 from bpy.props import (
     FloatProperty,
     EnumProperty,
-    PointerProperty
+    PointerProperty,
+    FloatVectorProperty
 )
 from bpy.types import (
     PropertyGroup
@@ -70,20 +71,57 @@ class WorkpiecePosition(PropertyGroup):
     view = EnumProperty(
         items=[('top',
                 "Top",
-                "Put visible surface in top view"),
+                "Put visible surface in top view",
+                "AXIS_TOP",
+                0),
                ('front',
                 "Front",
-                "Put visible surface in front view"),
+                "Put visible surface in front view",
+                "AXIS_FRONT",
+                1),
                ('right',
                 "Right",
-                "Put visible surface in right view"),
+                "Put visible surface in right view",
+                "AXIS_SIDE",
+                2),
                ('align',
                 "Align to view",
-                "Align visible surface to active view")
+                "Align visible surface to active view",
+                "VIEW3D",
+                3)
                ],
         name="View",
         default='front')
 
+
+    origin_location = EnumProperty(
+        items=[('3D cursor',
+                "3D Cursor",
+                "Set location to 3D cursor"),
+               ('center',
+                "Center",
+                "Set location to scene center"),
+               ('position',
+                "Position",
+                "Enter location coordinates"),
+               ('selected',
+                "Near selected",
+                "Put piece near selected object")],
+        name="Origin location",
+        default='3D cursor'
+    )
+
+    location_coordinates = FloatVectorProperty(
+        name="Location",
+        subtype="XYZ"
+    )
+
+    distance = FloatVectorProperty(
+        name="Distance",
+        description="Distance between the elements in BUs",
+        subtype="DIRECTION",
+        unit="LENGTH",
+        default=(0.1, 0.0, 0.0))
 
 class WorkpiecePropertyGroup(PropertyGroup):
     size_properties = PointerProperty(type=WorkpieceSize)

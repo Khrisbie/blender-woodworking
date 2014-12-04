@@ -6,6 +6,7 @@ Blender extensions for woodworking
 All operators are available in 3D view area, Tool Shelf panel ('T'), in the category tab "woodworking".
 
 # News
+- Created workpiece operator
 - Haunches available on both sides
 - Mortise cut opposite faces (through mortise)
 
@@ -90,6 +91,39 @@ Object should be in edit mode, a **quad** face should be selected and it must be
 
 The mortise panel is organized as the tenon panel, in three parts. Check tenon panel usage for more information.
 
+# Components
+
+## Workpiece
+
+### Description
+Creates a new workpiece object.
+
+### Usage
+
+1. Size properties
+
+  Here you set the dimensions for the workpiece (thickness, length and width).
+
+2. Position properties
+
+  These properties will let you place the workpiece in the view.
+
+  - Visible Face
+
+    Choose the side you want to view (face grain, edge grain, end grain).
+
+  - Orientation
+
+    The workpiece could be displayed horizontally or vertically.
+
+  - View
+
+    Choose the view you want to work into.
+
+  - Location
+
+    Select the workpiece's location in the view.
+  
 # Units
 In blender, you can change the default "blender unit" to **metric units** in the scene properties. 
 
