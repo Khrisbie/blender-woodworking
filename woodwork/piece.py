@@ -42,6 +42,34 @@ class WorkpieceOperator(bpy.types.Operator):
         "xminymaxzmax": Vector((1.0, -1.0, -1.0)),
         "xmaxymaxzmax": Vector((-1.0, -1.0, -1.0))
     }
+
+    origin_edge_to_origin_offset_scale = {
+        "top-face-xmin": Vector((1.0, 0.0, -1.0)),
+        "top-face-xmax": Vector((-1.0, 0.0, -1.0)),
+        "top-face-ymin": Vector((0.0, 1.0, -1.0)),
+        "top-face-ymax": Vector((0.0, -1.0, -1.0)),
+        "bottom-face-xmin": Vector((1.0, 0.0, 1.0)),
+        "bottom-face-xmax": Vector((-1.0, 0.0, 1.0)),
+        "bottom-face-ymin": Vector((0.0, 1.0, 1.0)),
+        "bottom-face-ymax": Vector((0.0, -1.0, 1.0)),
+        "front-edge-xmin": Vector((1.0, 1.0, 0.0)),
+        "front-edge-xmax": Vector((-1.0, 1.0, 0.0)),
+        "front-edge-zmin": Vector((0.0, 1.0, 1.0)),
+        "front-edge-zmax": Vector((0.0, 1.0, -1.0)),
+        "back-edge-xmin": Vector((1.0, -1.0, 0.0)),
+        "back-edge-xmax": Vector((-1.0, -1.0, 0.0)),
+        "back-edge-zmin": Vector((0.0, -1.0, 1.0)),
+        "back-edge-zmax": Vector((0.0, -1.0, -1.0)),
+        "left-end-ymin": Vector((1.0, 1.0, 0.0)),
+        "left-end-ymax": Vector((1.0, -1.0, 0.0)),
+        "left-end-zmin": Vector((1.0, 0.0, 1.0)),
+        "left-end-zmax": Vector((1.0, 0.0, -1.0)),
+        "right-end-ymin": Vector((-1.0, 1.0, 0.0)),
+        "right-end-ymax": Vector((-1.0, -1.0, 0.0)),
+        "right-end-zmin": Vector((-1.0, 0.0, 1.0)),
+        "right-end-zmax": Vector((-1.0, 0.0, -1.0))
+    }
+
     @staticmethod
     def create_piece(piece_size: WorkpieceSize,
                      origin_offset_scale: Vector) -> bmesh.types.BMesh:
@@ -151,6 +179,10 @@ class WorkpieceOperator(bpy.types.Operator):
             origin_offset_scale = \
                 WorkpieceOperator.origin_corner_to_origin_offset_scale[
                     position_properties.origin_corner]
+        elif position_properties.origin_type == "edge-centered":
+            origin_offset_scale = \
+                WorkpieceOperator.origin_edge_to_origin_offset_scale[
+                    position_properties.origin_edge]
         return origin_offset_scale
 
     def execute(self, context):

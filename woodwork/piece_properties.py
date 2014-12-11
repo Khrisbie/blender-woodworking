@@ -276,14 +276,14 @@ class WorkpiecePosition(PropertyGroup):
             ),
             (
                 "front-edge-zmin",
-                "Front edge grain - ymin",
+                "Front edge grain - zmin",
                 "Choose this edge's center coordinates as origin",
                 "",
                 10
             ),
             (
                 "front-edge-zmax",
-                "Front edge grain - ymax",
+                "Front edge grain - zmax",
                 "Choose this edge's center coordinates as origin",
                 "",
                 11
@@ -305,14 +305,14 @@ class WorkpiecePosition(PropertyGroup):
             ),
             (
                 "back-edge-zmin",
-                "Back edge grain - ymin",
+                "Back edge grain - zmin",
                 "Choose this edge's center coordinates as origin",
                 "",
                 14
             ),
             (
                 "back-edge-zmax",
-                "Back edge grain - ymax",
+                "Back edge grain - zmax",
                 "Choose this edge's center coordinates as origin",
                 "",
                 15
@@ -320,28 +320,28 @@ class WorkpiecePosition(PropertyGroup):
 
             (
                 "left-end-ymin",
-                "Left end grain - xmin",
+                "Left end grain - ymin",
                 "Choose this edge's center coordinates as origin",
                 "",
                 16
             ),
             (
                 "left-end-ymax",
-                "Left end grain - xmax",
+                "Left end grain - ymax",
                 "Choose this edge's center coordinates as origin",
                 "",
                 17
             ),
             (
                 "left-end-zmin",
-                "Left end grain - ymin",
+                "Left end grain - zmin",
                 "Choose this edge's center coordinates as origin",
                 "",
                 18
             ),
             (
                 "left-end-zmax",
-                "Left end grain - ymax",
+                "Left end grain - zmax",
                 "Choose this edge's center coordinates as origin",
                 "",
                 19
@@ -349,28 +349,28 @@ class WorkpiecePosition(PropertyGroup):
 
             (
                 "right-end-ymin",
-                "Right end grain - xmin",
+                "Right end grain - ymin",
                 "Choose this edge's center coordinates as origin",
                 "",
                 20
             ),
             (
                 "right-end-ymax",
-                "Right end grain - xmax",
+                "Right end grain - ymax",
                 "Choose this edge's center coordinates as origin",
                 "",
                 21
             ),
             (
                 "right-end-zmin",
-                "Right end grain - ymin",
+                "Right end grain - zmin",
                 "Choose this edge's center coordinates as origin",
                 "",
                 22
             ),
             (
                 "right-end-zmax",
-                "Right end grain - ymax",
+                "Right end grain - zmax",
                 "Choose this edge's center coordinates as origin",
                 "",
                 23
