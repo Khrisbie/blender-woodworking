@@ -32,26 +32,42 @@ class WorkpieceOperator(bpy.types.Operator):
 
     piece_properties = bpy.props.PointerProperty(type=WorkpiecePropertyGroup)
 
+    origin_corner_to_origin_offset_scale = {
+        "xminyminzmin": Vector((1.0, 1.0, 1.0)),
+        "xmaxyminzmin": Vector((-1.0, 1.0, 1.0)),
+        "xminymaxzmin": Vector((1.0, -1.0, 1.0)),
+        "xmaxymaxzmin": Vector((-1.0, -1.0, 1.0)),
+        "xminyminzmax": Vector((1.0, 1.0, -1.0)),
+        "xmaxyminzmax": Vector((-1.0, 1.0, -1.0)),
+        "xminymaxzmax": Vector((1.0, -1.0, -1.0)),
+        "xmaxymaxzmax": Vector((-1.0, -1.0, -1.0))
+    }
     @staticmethod
-    def create_piece(piece_size: WorkpieceSize) -> bmesh.types.BMesh:
+    def create_piece(piece_size: WorkpieceSize,
+                     origin_offset_scale: Vector) -> bmesh.types.BMesh:
         mesh = bmesh.new()
 
         len_offset = piece_size.length / 2.0
         width_offset = piece_size.width / 2.0
         thickness_offset = piece_size.thickness / 2.0
 
-        coords = ((-len_offset, -width_offset, -thickness_offset),
-                  (len_offset, -width_offset, -thickness_offset),
-                  (-len_offset, width_offset, -thickness_offset),
-                  (len_offset, width_offset, -thickness_offset),
-                  (-len_offset, -width_offset, thickness_offset),
-                  (len_offset, -width_offset, thickness_offset),
-                  (-len_offset, width_offset, thickness_offset),
-                  (len_offset, width_offset, thickness_offset))
+        origin_offset = Vector((origin_offset_scale[0] * len_offset,
+                                origin_offset_scale[1] * width_offset,
+                                origin_offset_scale[2] * thickness_offset))
+
+        coords = (Vector((-len_offset, -width_offset, -thickness_offset)),
+                  Vector((len_offset, -width_offset, -thickness_offset)),
+                  Vector((-len_offset, width_offset, -thickness_offset)),
+                  Vector((len_offset, width_offset, -thickness_offset)),
+                  Vector((-len_offset, -width_offset, thickness_offset)),
+                  Vector((len_offset, -width_offset, thickness_offset)),
+                  Vector((-len_offset, width_offset, thickness_offset)),
+                  Vector((len_offset, width_offset, thickness_offset)))
 
         verts = []
         for co in coords:
-            verts.append(mesh.verts.new(co))
+            vert_co = co + origin_offset
+            verts.append(mesh.verts.new(vert_co.to_tuple()))
 
         sides = ((0, 2, 3, 1),
                  (4, 5, 7, 6),
@@ -68,38 +84,74 @@ class WorkpieceOperator(bpy.types.Operator):
 
         return mesh
 
+    # Adapted from blender code "rotation_between_quats_to_quat"
+    @staticmethod
+    def quaternion_rotation(quat0, quat1):
+        conj = quat0.conjugated()
+        saved_conj = conj.copy()
+        val = 1.0 / conj.dot(conj)
+        saved_conj *= val
+        return saved_conj.cross(quat1)
+
     @staticmethod
     def visible_surface_rotation(visible_surface):
+        # bring visible surface in x/z axis (front view)
         rotations = []
-        if visible_surface == "edge grain":
+        if visible_surface == "face grain":
             rotations.append(Quaternion((1.0, 0.0, 0.0), radians(90.0)))
         elif visible_surface == "end grain":
-            rotations.append(Quaternion((1.0, 0.0, 0.0), radians(90.0)))
-            rotations.append(Quaternion((0.0, 1.0, 0.0), radians(90.0)))
+            rotations.append(Quaternion((0.0, 0.0, 1.0), radians(90.0)))
         return rotations
 
     @staticmethod
-    def orientation_rotation(orientation):
+    def orientation_rotation(context, orientation, view):
         rotations = []
         if orientation == "vertical":
-            rotations.append(Quaternion((0.0, 0.0, 1.0), radians(90.0)))
+            if view == "top":
+                rotations.append(Quaternion((0.0, 0.0, 1.0), radians(90.0)))
+            elif view == "right":
+                rotations.append(Quaternion((1.0, 0.0, 0.0), radians(90.0)))
+            elif view == "front":
+                rotations.append(Quaternion((0.0, 1.0, 0.0), radians(90.0)))
+            elif view == "align":
+                space_data = context.space_data
+                if space_data and space_data.type != 'VIEW_3D':
+                    space_data = None
+                if space_data:
+                    to_user_view = space_data.region_3d.view_rotation
+                    z_axis = Vector((0.0, 0.0, 1.0))
+                    z_axis.rotate(to_user_view)
+                    rotation_in_user_view = Quaternion(z_axis, radians(90.0))
+                    rotations.append(rotation_in_user_view)
+
         return rotations
 
     @staticmethod
     def view_rotation(context, view):
         rotations = []
-        if view == "front":
+        if view == "top":
             rotations.append(Quaternion((1.0, 0.0, 0.0), radians(90.0)))
         elif view == "right":
-            rotations.append(Quaternion((1.0, 0.0, 0.0), radians(90.0)))
             rotations.append(Quaternion((0.0, 0.0, 1.0), radians(90.0)))
         elif view == "align":
             space_data = context.space_data
             if space_data and space_data.type != 'VIEW_3D':
                 space_data = None
             if space_data:
-                rotations.append(space_data.region_3d.view_rotation)
+                # put in top view before user view
+                rotations.append(Quaternion((1.0, 0.0, 0.0), radians(90.0)))
+                rotations.append(space_data.region_3d.view_rotation.inverted())
         return rotations
+
+    @staticmethod
+    def origin_offset_scale(position_properties):
+        if position_properties.origin_type == "center":
+            origin_offset_scale = Vector((0.0, 0.0, 0.0))
+        elif position_properties.origin_type == "corner":
+            origin_offset_scale = \
+                WorkpieceOperator.origin_corner_to_origin_offset_scale[
+                    position_properties.origin_corner]
+        return origin_offset_scale
 
     def execute(self, context):
         if bpy.context.mode == "OBJECT":
@@ -117,26 +169,29 @@ class WorkpieceOperator(bpy.types.Operator):
             base.select = True
 
             piece_properties = self.piece_properties
-            piece_mesh = WorkpieceOperator.create_piece(piece_properties.size_properties)
-
             position_properties = piece_properties.position_properties
+            origin_offset_scale = WorkpieceOperator.origin_offset_scale(
+                position_properties)
+            piece_mesh = WorkpieceOperator.create_piece(
+                piece_properties.size_properties, origin_offset_scale)
 
-            visible = WorkpieceOperator.visible_surface_rotation(position_properties.visible_surface)
-            orientation = WorkpieceOperator.orientation_rotation(position_properties.orientation)
-            view = WorkpieceOperator.view_rotation(context, position_properties.view)
+            rotations = WorkpieceOperator.visible_surface_rotation(
+                position_properties.visible_surface)
+            rotations.extend(WorkpieceOperator.view_rotation(
+                context,
+                position_properties.view))
+            rotations.extend(WorkpieceOperator.orientation_rotation(
+                context,
+                position_properties.orientation,
+                position_properties.view))
 
-            for rotation in visible:
-                bmesh.ops.transform(piece_mesh,
-                                    matrix=rotation.to_matrix(),
-                                    verts=piece_mesh.verts)
-            for rotation in orientation:
-                bmesh.ops.transform(piece_mesh,
-                                    matrix=rotation.to_matrix(),
-                                    verts=piece_mesh.verts)
-            for rotation in view:
-                bmesh.ops.transform(piece_mesh,
-                                    matrix=rotation.to_matrix(),
-                                    verts=piece_mesh.verts)
+            object.rotation_mode = 'QUATERNION'
+
+            object_rotations = object.rotation_quaternion.copy()
+            for rotation in rotations:
+                object_rotations = WorkpieceOperator.quaternion_rotation(
+                    rotation, object_rotations)
+            object.rotation_quaternion = object_rotations
 
             if position_properties.origin_location == "3D cursor":
                 object.location = scene.cursor_location
@@ -145,9 +200,11 @@ class WorkpieceOperator(bpy.types.Operator):
             elif position_properties.origin_location == "selected":
                 if len(selected_objects) == 1:
                     selected = selected_objects[0]
-                    object.location = selected.location + Vector(position_properties.distance)
+                    object.location = selected.location + \
+                                      Vector(position_properties.distance)
                 else:
-                    self.report({'WARNING'}, "Woodworking: One object should be selected")
+                    self.report({'WARNING'},
+                                "Woodworking: One object should be selected")
 
             piece_mesh.to_mesh(mesh)
             piece_mesh.free()
@@ -156,7 +213,8 @@ class WorkpieceOperator(bpy.types.Operator):
             scene.objects.active = object
             return {'FINISHED'}
         else:
-            self.report({'WARNING'}, "Woodworking: Option only valid in Object mode")
+            self.report({'WARNING'},
+                        "Woodworking: Option only valid in Object mode")
             return {'CANCELLED'}
 
     @staticmethod
@@ -172,12 +230,26 @@ class WorkpieceOperator(bpy.types.Operator):
 
     @staticmethod
     def __draw_location_properties(position_box, position_properties):
+        position_box.label(text="Origin type")
+        position_box.prop(position_properties, "origin_type", text="")
+
+        if position_properties.origin_type == "corner":
+            position_box.label(text="Selected corner (local)")
+            position_box.prop(position_properties, "origin_corner", text="")
+        elif position_properties.origin_type == "edge-centered":
+            position_box.label(text="Selected edge")
+            position_box.prop(position_properties, "origin_edge", text="")
+        elif position_properties.origin_type == "face-centered":
+            position_box.label(text="Selected face")
+            position_box.prop(position_properties, "origin_face", text="")
+
         position_box.label(text="Origin location")
         position_box.prop(position_properties, "origin_location", text="")
 
         if position_properties.origin_location == "position":
-            position_box.label(text="Coordinates", icon='MANIPUL')
-            position_box.prop(position_properties, "location_coordinates", text="")
+            position_box.label(text="Coordinates")
+            position_box.prop(position_properties, "location_coordinates",
+                              text="")
         elif position_properties.origin_location == "selected":
             position_box.label(text="Distance", icon='ARROW_LEFTRIGHT')
             position_box.prop(position_properties, "distance", text="")
@@ -192,7 +264,8 @@ class WorkpieceOperator(bpy.types.Operator):
         position_box.prop(position_properties, "orientation", text="")
         position_box.label(text="View", icon="RESTRICT_VIEW_OFF")
         position_box.prop(position_properties, "view", text="")
-        WorkpieceOperator.__draw_location_properties(position_box, position_properties)
+        WorkpieceOperator.__draw_location_properties(position_box,
+                                                     position_properties)
 
     def draw(self, context):
         layout = self.layout
