@@ -70,6 +70,15 @@ class WorkpieceOperator(bpy.types.Operator):
         "right-end-zmax": Vector((-1.0, 0.0, -1.0))
     }
 
+    origin_face_to_origin_offset_scale = {
+        "face-top": Vector((0.0, 0.0, -1.0)),
+        "face-bottom": Vector((0.0, 0.0, 1.0)),
+        "edge-front": Vector((0.0, 1.0, 0.0)),
+        "edge-back": Vector((0.0, -1.0, 0.0)),
+        "end-left": Vector((1.0, 0.0, 0.0)),
+        "end-right": Vector((-1.0, 0.0, 0.0))
+    }
+
     @staticmethod
     def create_piece(piece_size: WorkpieceSize,
                      origin_offset_scale: Vector) -> bmesh.types.BMesh:
@@ -183,6 +192,10 @@ class WorkpieceOperator(bpy.types.Operator):
             origin_offset_scale = \
                 WorkpieceOperator.origin_edge_to_origin_offset_scale[
                     position_properties.origin_edge]
+        elif position_properties.origin_type == "face-centered":
+            origin_offset_scale = \
+                WorkpieceOperator.origin_face_to_origin_offset_scale[
+                    position_properties.origin_face]
         return origin_offset_scale
 
     def execute(self, context):
@@ -233,7 +246,7 @@ class WorkpieceOperator(bpy.types.Operator):
                 if len(selected_objects) == 1:
                     selected = selected_objects[0]
                     object.location = selected.location + \
-                                      Vector(position_properties.distance)
+                        Vector(position_properties.distance)
                 else:
                     self.report({'WARNING'},
                                 "Woodworking: One object should be selected")
