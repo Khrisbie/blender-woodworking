@@ -1,10 +1,15 @@
 import bpy
 import bmesh
+from bpy.props import (
+    BoolProperty,
+    PointerProperty,
+    CollectionProperty,
+    StringProperty
+)
 from math import (
     radians
 )
 from mathutils import (
-    Matrix,
     Vector,
     Quaternion
 )
@@ -14,6 +19,9 @@ from . piece_properties import (
     WorkpieceSize
 )
 
+class GroupItem(bpy.types.PropertyGroup):
+    name = StringProperty(name="", default="")
+    selected = BoolProperty(name="", default=False)
 
 class WorkpieceOperator(bpy.types.Operator):
     bl_description = "Creates a new workpiece"
@@ -25,12 +33,16 @@ class WorkpieceOperator(bpy.types.Operator):
     #
     # Class variables
     #
-    expand_size_properties = bpy.props.BoolProperty(name="Expand",
+    expand_description_properties = BoolProperty(name="Expand",
+                                                           default=True)
+    expand_size_properties = BoolProperty(name="Expand",
                                                     default=True)
-    expand_position_properties = bpy.props.BoolProperty(name="Expand",
+    expand_position_properties = BoolProperty(name="Expand",
                                                         default=True)
 
-    piece_properties = bpy.props.PointerProperty(type=WorkpiecePropertyGroup)
+    piece_properties = PointerProperty(type=WorkpiecePropertyGroup)
+
+    group_items = CollectionProperty(type=GroupItem)
 
     origin_corner_to_origin_offset_scale = {
         "xminyminzmin": Vector((1.0, 1.0, 1.0)),
@@ -203,18 +215,30 @@ class WorkpieceOperator(bpy.types.Operator):
 
             scene = context.scene
 
+            piece_properties = self.piece_properties
+            description_properties = piece_properties.description_properties
+            position_properties = piece_properties.position_properties
+
             # save selected object
             selected_objects = context.selected_objects
             if len(selected_objects) > 0:
                 for ob in scene.objects:
                     ob.select = False
-            mesh = bpy.data.meshes.new("Workpiece")
-            object = bpy.data.objects.new("Workpiece", mesh)
+
+            if not description_properties.piece_name:
+                description_properties.piece_name = description_properties.cutting_list_type
+            piece_name = description_properties.piece_name
+
+            mesh = bpy.data.meshes.new(piece_name + 'Mesh')
+            object = bpy.data.objects.new(piece_name, mesh)
+
+            # save custom properties
+            object.woodwork.cutting_list_type = description_properties.cutting_list_type
+            object.woodwork.comments = description_properties.comments
+
             base = scene.objects.link(object)
             base.select = True
 
-            piece_properties = self.piece_properties
-            position_properties = piece_properties.position_properties
             origin_offset_scale = WorkpieceOperator.origin_offset_scale(
                 position_properties)
             piece_mesh = WorkpieceOperator.create_piece(
@@ -256,6 +280,46 @@ class WorkpieceOperator(bpy.types.Operator):
 
             mesh.update()
             scene.objects.active = object
+
+            # create group list
+
+            obj_name = object.name
+
+            for group in bpy.data.groups:
+                found = False
+                for displayed_group in self.group_items:
+                    if displayed_group.name == group.name:
+                        found = True
+                if not found:
+                    new_item = self.group_items.add()
+                    new_item.name = group.name
+                    group_objects = group.objects
+                    if obj_name in group.objects and object in group_objects[:]:
+                        new_item.selected = True
+
+            # create new group if needed
+            if description_properties.create_new_group:
+                if description_properties.group_name:
+                    description_properties.create_new_group = False
+                    new_item = self.group_items.add()
+                    new_item.name = description_properties.group_name
+                    new_item.selected = True
+
+            # add / remove object from groups
+            for group_item in self.group_items:
+                if group_item.selected:
+                    # add object to group
+                    if not group_item.name in bpy.data.groups:
+                        bpy.ops.group.create(name=group_item.name)
+                    bpy.ops.object.group_link(group=group_item.name)
+                else:
+                    # remove selected objects from group
+                    if group_item.name in bpy.data.groups:
+                        group = bpy.data.groups.get(group_item.name)
+                        if obj_name in group.objects and object in group_objects[:]:
+                            bpy.ops.group.objects_remove(group=group_item.name)
+
+            description_properties.group_name = ""
             return {'FINISHED'}
         else:
             self.report({'WARNING'},
@@ -266,11 +330,11 @@ class WorkpieceOperator(bpy.types.Operator):
     def __draw_size_properties(layout, size_properties):
         size_box = layout.box()
 
-        size_box.label(text="Thickness")
+        size_box.label(text="Thickness", icon="SETTINGS")
         size_box.prop(size_properties, "thickness", text="")
-        size_box.label(text="Length")
+        size_box.label(text="Length", icon="SETTINGS")
         size_box.prop(size_properties, "length", text="")
-        size_box.label(text="Width")
+        size_box.label(text="Width", icon="SETTINGS")
         size_box.prop(size_properties, "width", text="")
 
     @staticmethod
@@ -312,12 +376,56 @@ class WorkpieceOperator(bpy.types.Operator):
         WorkpieceOperator.__draw_location_properties(position_box,
                                                      position_properties)
 
+    @staticmethod
+    def __draw_description_properties(self, layout, description_properties):
+        description_box = layout.box()
+
+        description_box.label(text="Type", icon="OOPS")
+        description_box.prop(description_properties, "cutting_list_type", text="")
+        description_box.label(text="Piece name", icon="SORTALPHA")
+        description_box.prop(description_properties, "piece_name", text="")
+        description_box.label(text="Comments", icon="TEXT")
+        description_box.prop(description_properties, "comments", text="")
+
+        description_box.prop(description_properties, "is_in_group")
+        if description_properties.is_in_group:
+            if not description_properties.create_new_group:
+                if len(self.group_items) > 0:
+                    description_box.template_list(
+                        "GroupUIList",
+                        "",
+                        self,
+                        "group_items",
+                        description_properties,
+                        "active_group_index",
+                        rows=4,
+                        maxrows=4)
+                description_box.prop(description_properties, "create_new_group")
+            else:
+                description_box.prop(description_properties, "create_new_group")
+                description_box.prop(description_properties, "group_name")
+
     def draw(self, context):
         layout = self.layout
 
         piece_properties = self.piece_properties
+        description_properties = piece_properties.description_properties
         size_properties = piece_properties.size_properties
         position_properties = piece_properties.position_properties
+
+        row = layout.row(align=True)
+        row.alignment = 'EXPAND'
+        if not self.expand_description_properties:
+            row.prop(self, "expand_description_properties", icon="TRIA_RIGHT",
+                     icon_only=True, text="Description",
+                     emboss=False)
+        else:
+            row.prop(self, "expand_description_properties", icon="TRIA_DOWN",
+                     icon_only=True, text="Description",
+                     emboss=False)
+            WorkpieceOperator.__draw_description_properties(self,
+                                                            layout,
+                                                            description_properties)
 
         row = layout.row(align=True)
         row.alignment = 'EXPAND'
@@ -346,9 +454,19 @@ class WorkpieceOperator(bpy.types.Operator):
                                                          position_properties)
 
 
+class GroupUIList(bpy.types.UIList):
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        layout.label(item.name)
+        layout.prop(item, "selected")
+
+
 def register():
+    bpy.utils.register_class(GroupItem)
+    bpy.utils.register_class(GroupUIList)
     bpy.utils.register_class(WorkpieceOperator)
 
 
 def unregister():
     bpy.utils.unregister_class(WorkpieceOperator)
+    bpy.utils.unregister_class(GroupUIList)
+    bpy.utils.unregister_class(GroupItem)

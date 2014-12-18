@@ -27,6 +27,7 @@ if "bpy" in locals():
     imp.reload(components_panel)
 
     imp.reload(scene_woodwork)
+    imp.reload(object_woodwork)
 
     imp.reload(translations)
 
@@ -44,6 +45,7 @@ else:
     from . import components_panel
 
     from . import scene_woodwork
+    from . import object_woodwork
 
     from . import translations
 
@@ -61,6 +63,7 @@ def register():
     components_panel.register()
 
     scene_woodwork.register()
+    object_woodwork.register()
 
     translations.register(__name__)
 
@@ -68,6 +71,7 @@ def register():
 def unregister():
     translations.unregister(__name__)
 
+    object_woodwork.unregister()
     scene_woodwork.unregister()
 
     components_panel.unregister()

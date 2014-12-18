@@ -3,11 +3,108 @@ from bpy.props import (
     FloatProperty,
     EnumProperty,
     PointerProperty,
-    FloatVectorProperty
+    FloatVectorProperty,
+    StringProperty,
+    BoolProperty,
+    IntProperty
 )
 from bpy.types import (
     PropertyGroup
 )
+
+
+class WorkpieceDescription(PropertyGroup):
+    piece_name = StringProperty(
+        name="name",
+        description="Workpiece name"
+    )
+
+    comments = StringProperty()
+
+    cutting_list_type = EnumProperty(
+        items=[
+            (
+                "none",
+                "None / Special",
+                "Nothing in particular"
+            ),
+            (
+                "rail",
+                "Rail",
+                "Horizontal member of a frame"
+            ),
+            (
+                "stile",
+                "Stile",
+                "Vertical member of a frame"
+            ),
+            # plinthe
+            (
+                "baseboard",
+                "Baseboard",
+                "A board functioning as the base of anything"
+            ),
+            # bordure
+            (
+                "skirting",
+                "Skirting",
+                ""
+            ),
+            (
+                "breadboard end",
+                "Breadboard end",
+                "Narrow piece that is mechanically joined to the end of a larger panel"
+            ),
+            # latte / lamelle
+            (
+                "slat",
+                "Slat",
+                ""
+            ),
+            # etagere
+            (
+                "shelf",
+                "Shelf plank",
+                ""
+            ),
+            (
+                "bead",
+                "Bead",
+                ""
+            ),
+            # moulure
+            (
+                "molding",
+                "Molding",
+                "Shaped strip"
+            )
+        ],
+        name="cutting_list_type",
+        default="none"
+    )
+
+    is_in_group = BoolProperty(
+        name="Part of",
+        description="This piece is in a part of a project",
+        default=True
+    )
+
+    active_group_index = IntProperty(
+        name="Active Group Index",
+        description="Active group index",
+        default=0
+    )
+
+    create_new_group = BoolProperty(
+        name="Create a new project part",
+        default=False
+    )
+
+    group_name = StringProperty(
+        name="Part name",
+        description="Part of the project this piece belongs to",
+        maxlen=64
+    )
 
 
 class WorkpieceSize(PropertyGroup):
@@ -476,11 +573,13 @@ class WorkpiecePosition(PropertyGroup):
         default=(0.1, 0.0, 0.0))
 
 class WorkpiecePropertyGroup(PropertyGroup):
+    description_properties = PointerProperty(type=WorkpieceDescription)
     size_properties = PointerProperty(type=WorkpieceSize)
     position_properties = PointerProperty(type=WorkpiecePosition)
 
 
 def register():
+    bpy.utils.register_class(WorkpieceDescription)
     bpy.utils.register_class(WorkpieceSize)
     bpy.utils.register_class(WorkpiecePosition)
     bpy.utils.register_class(WorkpiecePropertyGroup)
@@ -490,3 +589,4 @@ def unregister():
     bpy.utils.unregister_class(WorkpiecePropertyGroup)
     bpy.utils.unregister_class(WorkpiecePosition)
     bpy.utils.unregister_class(WorkpieceSize)
+    bpy.utils.unregister_class(WorkpieceDescription)
