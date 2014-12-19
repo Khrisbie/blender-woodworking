@@ -285,40 +285,45 @@ class WorkpieceOperator(bpy.types.Operator):
 
             obj_name = object.name
 
-            for group in bpy.data.groups:
-                found = False
-                for displayed_group in self.group_items:
-                    if displayed_group.name == group.name:
-                        found = True
-                if not found:
-                    new_item = self.group_items.add()
-                    new_item.name = group.name
-                    group_objects = group.objects
-                    if obj_name in group.objects and object in group_objects[:]:
+            if description_properties.is_in_group:
+                for group in bpy.data.groups:
+                    found = False
+                    for displayed_group in self.group_items:
+                        if displayed_group.name == group.name:
+                            found = True
+                    if not found:
+                        new_item = self.group_items.add()
+                        new_item.name = group.name
+                        group_objects = group.objects
+                        if obj_name in group.objects and object in group_objects[:]:
+                            new_item.selected = True
+
+                # create new group if needed
+                if description_properties.create_new_group:
+                    if description_properties.group_name:
+                        description_properties.create_new_group = False
+                        new_item = self.group_items.add()
+                        new_item.name = description_properties.group_name
                         new_item.selected = True
 
-            # create new group if needed
-            if description_properties.create_new_group:
-                if description_properties.group_name:
-                    description_properties.create_new_group = False
-                    new_item = self.group_items.add()
-                    new_item.name = description_properties.group_name
-                    new_item.selected = True
-
-            # add / remove object from groups
-            for group_item in self.group_items:
-                if group_item.selected:
-                    # add object to group
-                    if not group_item.name in bpy.data.groups:
-                        bpy.ops.group.create(name=group_item.name)
-                    bpy.ops.object.group_link(group=group_item.name)
-                else:
-                    # remove selected objects from group
-                    if group_item.name in bpy.data.groups:
-                        group = bpy.data.groups.get(group_item.name)
-                        if obj_name in group.objects and object in group_objects[:]:
-                            bpy.ops.group.objects_remove(group=group_item.name)
-
+                # add / remove object from groups
+                for group_item in self.group_items:
+                    if group_item.selected:
+                        # add object to group
+                        if not group_item.name in bpy.data.groups:
+                            bpy.ops.group.create(name=group_item.name)
+                        bpy.ops.object.group_link(group=group_item.name)
+                    else:
+                        # remove selected objects from group
+                        if group_item.name in bpy.data.groups:
+                            group = bpy.data.groups.get(group_item.name)
+                            if obj_name in group.objects and object in group_objects[:]:
+                                bpy.ops.group.objects_remove(group=group_item.name)
+            else:
+                # remove selected objects from every group
+                for group in bpy.data.groups:
+                    if obj_name in group.objects and object in group.objects[:]:
+                        bpy.ops.group.objects_remove(group=group.name)
             description_properties.group_name = ""
             return {'FINISHED'}
         else:
