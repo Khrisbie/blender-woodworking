@@ -18,12 +18,15 @@ from . piece_properties import (
     WorkpiecePropertyGroup,
     WorkpieceDescription,
     WorkpieceSize,
-    WorkpiecePosition
+    WorkpiecePosition,
+    WorkpieceCount
 )
+
 
 class GroupItem(bpy.types.PropertyGroup):
     name = StringProperty(name="", default="")
     selected = BoolProperty(name="", default=False)
+
 
 class WorkpieceOperator(bpy.types.Operator):
     bl_description = "Creates a new workpiece"
@@ -36,11 +39,13 @@ class WorkpieceOperator(bpy.types.Operator):
     # Class variables
     #
     expand_description_properties = BoolProperty(name="Expand",
-                                                           default=True)
+                                                 default=True)
     expand_size_properties = BoolProperty(name="Expand",
-                                                    default=True)
+                                          default=True)
     expand_position_properties = BoolProperty(name="Expand",
-                                                        default=True)
+                                              default=True)
+    expand_count_properties = BoolProperty(name="Expand",
+                                           default=True)
 
     piece_properties = PointerProperty(type=WorkpiecePropertyGroup)
 
@@ -145,7 +150,7 @@ class WorkpieceOperator(bpy.types.Operator):
         return saved_conj.cross(quat1)
 
     @staticmethod
-    def visible_surface_rotation(visible_surface):
+    def visible_surface_rotation(visible_surface: str) -> list:
         # bring visible surface in x/z axis (front view)
         rotations = []
         if visible_surface == "face grain":
@@ -155,7 +160,7 @@ class WorkpieceOperator(bpy.types.Operator):
         return rotations
 
     @staticmethod
-    def orientation_rotation(context, orientation, view):
+    def orientation_rotation(context, orientation: str, view: str) -> list:
         rotations = []
         if orientation == "vertical":
             if view == "top":
@@ -178,7 +183,7 @@ class WorkpieceOperator(bpy.types.Operator):
         return rotations
 
     @staticmethod
-    def view_rotation(context, view):
+    def view_rotation(context, view: str) -> list:
         rotations = []
         if view == "top":
             rotations.append(Quaternion((1.0, 0.0, 0.0), radians(90.0)))
@@ -214,17 +219,17 @@ class WorkpieceOperator(bpy.types.Operator):
 
     @staticmethod
     def is_object_in_group(scene_object: bpy.types.Object,
-                           group: bpy.types.Group):
+                           group: bpy.types.Group) -> bool:
         found = False
-        obj_name = object.name
+        obj_name = scene_object.name
         group_objects = group.objects
-        if obj_name in group_objects and object in group_objects[:]:
+        if obj_name in group_objects and scene_object in group_objects[:]:
             found = True
         return found
 
     def handle_workpiece_group(self,
                                description_properties: WorkpieceDescription,
-                               object: bpy.types.Object):
+                               scene_object: bpy.types.Object):
         if description_properties.is_in_group:
 
             for group in bpy.data.groups:
@@ -236,7 +241,7 @@ class WorkpieceOperator(bpy.types.Operator):
                     new_item = self.group_items.add()
                     new_item.name = group.name
 
-                    if WorkpieceOperator.is_object_in_group(object, group):
+                    if WorkpieceOperator.is_object_in_group(scene_object, group):
                         new_item.selected = True
 
             # create new group if needed
@@ -258,14 +263,52 @@ class WorkpieceOperator(bpy.types.Operator):
                     # remove selected objects from group
                     if group_item.name in bpy.data.groups:
                         group = bpy.data.groups.get(group_item.name)
-                        if WorkpieceOperator.is_object_in_group(object, group):
+                        if WorkpieceOperator.is_object_in_group(scene_object, group):
                             bpy.ops.group.objects_remove(group=group_item.name)
         else:
             # remove selected objects from every group
             for group in bpy.data.groups:
-                if WorkpieceOperator.is_object_in_group(object, group):
+                if WorkpieceOperator.is_object_in_group(scene_object, group):
                     bpy.ops.group.objects_remove(group=group.name)
         description_properties.group_name = ""
+
+    @staticmethod
+    def set_object_rotation(context,
+                            position_properties: WorkpiecePosition,
+                            scene_object: bpy.types.Object):
+        rotations = WorkpieceOperator.visible_surface_rotation(
+            position_properties.visible_surface)
+        rotations.extend(WorkpieceOperator.view_rotation(
+            context,
+            position_properties.view))
+        rotations.extend(WorkpieceOperator.orientation_rotation(
+            context,
+            position_properties.orientation,
+            position_properties.view))
+        scene_object.rotation_mode = 'QUATERNION'
+        object_rotations = scene_object.rotation_quaternion.copy()
+        for rotation in rotations:
+            object_rotations = WorkpieceOperator.quaternion_rotation(
+                rotation, object_rotations)
+        scene_object.rotation_quaternion = object_rotations
+
+    def set_object_location(self,
+                            position_properties: WorkpiecePosition,
+                            scene: bpy.types.Scene,
+                            scene_object: bpy.types.Object,
+                            selected_objects):
+        if position_properties.origin_location == "3D cursor":
+            scene_object.location = scene.cursor_location
+        elif position_properties.origin_location == "position":
+            scene_object.location = position_properties.location_coordinates
+        elif position_properties.origin_location == "selected":
+            if len(selected_objects) == 1:
+                selected = selected_objects[0]
+                scene_object.location = selected.location + \
+                                        Vector(position_properties.distance)
+            else:
+                self.report({'WARNING'},
+                            "Woodworking: One object should be selected")
 
     def execute(self, context):
         if bpy.context.mode == "OBJECT":
@@ -275,6 +318,7 @@ class WorkpieceOperator(bpy.types.Operator):
             piece_properties = self.piece_properties
             description_properties = piece_properties.description_properties
             position_properties = piece_properties.position_properties
+            count_properties = piece_properties.count_properties
 
             # save selected object
             selected_objects = context.selected_objects
@@ -287,59 +331,47 @@ class WorkpieceOperator(bpy.types.Operator):
             piece_name = description_properties.piece_name
 
             mesh = bpy.data.meshes.new(piece_name + 'Mesh')
-            object = bpy.data.objects.new(piece_name, mesh)
+            scene_object = bpy.data.objects.new(piece_name, mesh)
 
             # save custom properties
-            object.woodwork.cutting_list_type = description_properties.cutting_list_type
-            object.woodwork.comments = description_properties.comments
+            scene_object.woodwork.cutting_list_type = \
+                description_properties.cutting_list_type
+            scene_object.woodwork.comments = description_properties.comments
 
-            base = scene.objects.link(object)
+            base = scene.objects.link(scene_object)
             base.select = True
 
             origin_offset_scale = WorkpieceOperator.origin_offset_scale(
                 position_properties)
             piece_mesh = WorkpieceOperator.create_piece(
-                piece_properties.size_properties, origin_offset_scale)
+                piece_properties.size_properties,
+                origin_offset_scale)
 
-            rotations = WorkpieceOperator.visible_surface_rotation(
-                position_properties.visible_surface)
-            rotations.extend(WorkpieceOperator.view_rotation(
-                context,
-                position_properties.view))
-            rotations.extend(WorkpieceOperator.orientation_rotation(
-                context,
-                position_properties.orientation,
-                position_properties.view))
+            WorkpieceOperator.set_object_rotation(context,
+                                                  position_properties,
+                                                  scene_object)
 
-            object.rotation_mode = 'QUATERNION'
-
-            object_rotations = object.rotation_quaternion.copy()
-            for rotation in rotations:
-                object_rotations = WorkpieceOperator.quaternion_rotation(
-                    rotation, object_rotations)
-            object.rotation_quaternion = object_rotations
-
-            if position_properties.origin_location == "3D cursor":
-                object.location = scene.cursor_location
-            elif position_properties.origin_location == "position":
-                object.location = position_properties.location_coordinates
-            elif position_properties.origin_location == "selected":
-                if len(selected_objects) == 1:
-                    selected = selected_objects[0]
-                    object.location = selected.location + \
-                        Vector(position_properties.distance)
-                else:
-                    self.report({'WARNING'},
-                                "Woodworking: One object should be selected")
+            self.set_object_location(position_properties, scene, scene_object,
+                                     selected_objects)
 
             piece_mesh.to_mesh(mesh)
             piece_mesh.free()
 
             mesh.update()
-            scene.objects.active = object
+            scene.objects.active = scene_object
 
             # create group list
-            self.handle_workpiece_group(description_properties, object)
+            self.handle_workpiece_group(description_properties, scene_object)
+
+            # create copies
+            if count_properties.count > 1:
+                for idx in range(count_properties.count - 1):
+                    if count_properties.use_same_mesh:
+                        bpy.ops.object.duplicate_move_linked()
+                    else:
+                        bpy.ops.object.duplicate_move()
+
+
             return {'FINISHED'}
         else:
             self.report({'WARNING'},
@@ -347,7 +379,8 @@ class WorkpieceOperator(bpy.types.Operator):
             return {'CANCELLED'}
 
     @staticmethod
-    def __draw_size_properties(layout, size_properties):
+    def __draw_size_properties(layout: bpy.types.UILayout,
+                               size_properties: WorkpieceSize):
         size_box = layout.box()
 
         size_box.label(text="Thickness", icon="SETTINGS")
@@ -358,7 +391,8 @@ class WorkpieceOperator(bpy.types.Operator):
         size_box.prop(size_properties, "width", text="")
 
     @staticmethod
-    def __draw_location_properties(position_box, position_properties):
+    def __draw_location_properties(position_box: bpy.types.UILayout,
+                                   position_properties: WorkpiecePosition):
         position_box.label(text="Origin type")
         position_box.prop(position_properties, "origin_type", text="")
 
@@ -384,7 +418,8 @@ class WorkpieceOperator(bpy.types.Operator):
             position_box.prop(position_properties, "distance", text="")
 
     @staticmethod
-    def __draw_position_properties(layout, position_properties):
+    def __draw_position_properties(layout: bpy.types.UILayout,
+                                   position_properties: WorkpiecePosition):
         position_box = layout.box()
 
         position_box.label(text="Visible face", icon="SNAP_FACE")
@@ -396,8 +431,9 @@ class WorkpieceOperator(bpy.types.Operator):
         WorkpieceOperator.__draw_location_properties(position_box,
                                                      position_properties)
 
-    @staticmethod
-    def __draw_description_properties(self, layout, description_properties):
+    def __draw_description_properties(self,
+                                      layout: bpy.types.UILayout,
+                                      description_properties: WorkpieceDescription):
         description_box = layout.box()
 
         description_box.label(text="Type", icon="OOPS")
@@ -420,10 +456,25 @@ class WorkpieceOperator(bpy.types.Operator):
                         "active_group_index",
                         rows=4,
                         maxrows=4)
-                description_box.prop(description_properties, "create_new_group")
+                description_box.prop(description_properties, "create_new_group",
+                                     emboss=True)
             else:
-                description_box.prop(description_properties, "create_new_group")
+                description_box.prop(description_properties, "create_new_group",
+                                     emboss=True)
                 description_box.prop(description_properties, "group_name")
+
+    @staticmethod
+    def __draw_count_properties(layout: bpy.types.UILayout,
+                                count_properties: WorkpieceCount):
+        count_box = layout.box()
+
+        count_box.label(text="Count", icon="ORTHO")
+        count_box.prop(count_properties, "count", text="")
+        if count_properties.count > 1:
+            count_box.prop(count_properties, "use_same_mesh",
+                           text="Use same mesh", icon="MESH_DATA", toggle=True)
+            count_box.prop(count_properties, "link_data",
+                           text="Link data", icon="LINKED", toggle=True)
 
     def draw(self, context):
         layout = self.layout
@@ -432,6 +483,7 @@ class WorkpieceOperator(bpy.types.Operator):
         description_properties = piece_properties.description_properties
         size_properties = piece_properties.size_properties
         position_properties = piece_properties.position_properties
+        count_properties = piece_properties.count_properties
 
         row = layout.row(align=True)
         row.alignment = 'EXPAND'
@@ -472,6 +524,19 @@ class WorkpieceOperator(bpy.types.Operator):
                      emboss=False)
             WorkpieceOperator.__draw_position_properties(layout,
                                                          position_properties)
+
+        row = layout.row(align=True)
+        row.alignment = 'EXPAND'
+        if not self.expand_count_properties:
+            row.prop(self, "expand_count_properties", icon="TRIA_RIGHT",
+                     icon_only=True, text="Count",
+                     emboss=False)
+        else:
+            row.prop(self, "expand_count_properties", icon="TRIA_DOWN",
+                     icon_only=True, text="Count",
+                     emboss=False)
+            WorkpieceOperator.__draw_count_properties(layout,
+                                                      count_properties)
 
 
 class GroupUIList(bpy.types.UIList):

@@ -572,13 +572,35 @@ class WorkpiecePosition(PropertyGroup):
         unit="LENGTH",
         default=(0.1, 0.0, 0.0))
 
+
+class WorkpieceCount(PropertyGroup):
+    count = IntProperty(
+        name="Count",
+        description="Number of pieces with same characteristics to use",
+        min=1
+    )
+
+    use_same_mesh = BoolProperty(
+        name="Use same mesh",
+        description="Use the same mesh for each piece (modifying one will modify the others)",
+        default=False
+    )
+
+    link_data = BoolProperty(
+        name="Link data",
+        description="Link the active object to the others"
+    )
+
+
 class WorkpiecePropertyGroup(PropertyGroup):
     description_properties = PointerProperty(type=WorkpieceDescription)
     size_properties = PointerProperty(type=WorkpieceSize)
     position_properties = PointerProperty(type=WorkpiecePosition)
+    count_properties = PointerProperty(type=WorkpieceCount)
 
 
 def register():
+    bpy.utils.register_class(WorkpieceCount)
     bpy.utils.register_class(WorkpieceDescription)
     bpy.utils.register_class(WorkpieceSize)
     bpy.utils.register_class(WorkpiecePosition)
@@ -590,3 +612,4 @@ def unregister():
     bpy.utils.unregister_class(WorkpiecePosition)
     bpy.utils.unregister_class(WorkpieceSize)
     bpy.utils.unregister_class(WorkpieceDescription)
+    bpy.utils.unregister_class(WorkpieceCount)
