@@ -568,7 +568,7 @@ class WorkpiecePosition(PropertyGroup):
     distance = FloatVectorProperty(
         name="Distance",
         description="Distance between the elements in BUs",
-        subtype="DIRECTION",
+        subtype="XYZ",
         unit="LENGTH",
         default=(0.1, 0.0, 0.0))
 
@@ -586,10 +586,12 @@ class WorkpieceCount(PropertyGroup):
         default=False
     )
 
-    link_data = BoolProperty(
-        name="Link data",
-        description="Link the active object to the others"
-    )
+    distance = FloatVectorProperty(
+        name="Distance",
+        description="Distance between the elements",
+        subtype="XYZ",
+        unit="LENGTH",
+        default=(0.0, 0.0, 0.0))
 
 
 class WorkpiecePropertyGroup(PropertyGroup):

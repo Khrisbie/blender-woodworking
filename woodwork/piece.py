@@ -365,11 +365,20 @@ class WorkpieceOperator(bpy.types.Operator):
 
             # create copies
             if count_properties.count > 1:
-                for idx in range(count_properties.count - 1):
+                distance = Vector(count_properties.distance)
+                for counter in range(count_properties.count - 1):
                     if count_properties.use_same_mesh:
-                        bpy.ops.object.duplicate_move_linked()
+                        bpy.ops.object.duplicate_move_linked(
+                            TRANSFORM_OT_translate={
+                                "value": (distance[0], distance[1], distance[2])
+                            }
+                        )
                     else:
-                        bpy.ops.object.duplicate_move()
+                        bpy.ops.object.duplicate_move(
+                            TRANSFORM_OT_translate={
+                                "value": (distance[0], distance[1], distance[2])
+                            }
+                        )
 
 
             return {'FINISHED'}
@@ -472,9 +481,10 @@ class WorkpieceOperator(bpy.types.Operator):
         count_box.prop(count_properties, "count", text="")
         if count_properties.count > 1:
             count_box.prop(count_properties, "use_same_mesh",
-                           text="Use same mesh", icon="MESH_DATA", toggle=True)
-            count_box.prop(count_properties, "link_data",
-                           text="Link data", icon="LINKED", toggle=True)
+                           text="Use same mesh", icon="LINKED", toggle=True)
+
+            count_box.label(text="Distance", icon='ARROW_LEFTRIGHT')
+            count_box.prop(count_properties, "distance", text="")
 
     def draw(self, context):
         layout = self.layout
