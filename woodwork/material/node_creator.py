@@ -1,4 +1,7 @@
 from math import modf
+from math import pi
+from abc import ABCMeta, abstractmethod
+
 import bpy
 import mathutils
 
@@ -30,6 +33,72 @@ class Node:
     pass
 
 
+class Position:
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def set_node_position(self, node: Node):
+        pass
+
+
+class Below(Position):
+    pass
+
+
+class Below(Position):
+    def __init__(self, relative_node: Node):
+        self.relative_node = relative_node
+        self.distance = 0.0
+
+    def with_distance(self, dist: float) -> Below:
+        self.distance = dist
+        return self
+
+    def set_node_position(self, node: Node):
+        location = self.relative_node.get_location()
+        computed_height = self.relative_node.compute_height()
+        node.set_location((location.x, location.y - computed_height - self.distance))
+
+
+def below(relative_node: Node) -> Below:
+    return Below(relative_node)
+
+
+class OnTheRightSideOf(Position):
+    pass
+
+
+class OnTheRightSideOf(Position):
+    def __init__(self, relative_node: Node):
+        self.relative_node = relative_node
+        self.distance = 0.0
+
+    def with_distance(self, dist: float) -> OnTheRightSideOf:
+        self.distance = dist
+        return self
+
+    def set_node_position(self, node: Node):
+        ref_x, ref_y = self.relative_node.get_location()
+        computed_width = self.relative_node.compute_width()
+        node.set_location((ref_x + computed_width + self.distance, ref_y))
+
+
+def on_the_right_side_of(relative_node: Node) -> OnTheRightSideOf:
+    return OnTheRightSideOf(relative_node)
+
+
+class Location(Position):
+    def __init__(self, location: tuple):
+        self.location = location
+
+    def set_node_position(self, node: Node):
+        node.set_location(self.location)
+
+
+def location(location: tuple) -> Location:
+    return Location(location)
+
+
 class Node:
 
     def __init__(self, bpy_node: bpy.types.Node):
@@ -49,9 +118,14 @@ class Node:
             'ShaderNodeTexNoise': NoiseTexture,
             'ShaderNodeTexGradient': GradientTexture,
             'ShaderNodeTexMusgrave': MusgraveTexture,
+            'ShaderNodeTexVoronoi': VoronoiTexture,
             'ShaderNodeValToRGB': ColorRamp,
             'ShaderNodeRGBCurve': RGBCurve,
-            'ShaderNodeMath': Math
+            'ShaderNodeMath': Math,
+            'ShaderNodeSeparateRGB': SeparateRGB,
+            'ShaderNodeSeparateXYZ': SeparateXYZ,
+            'ShaderNodeCombineXYZ': CombineXYZ,
+            'ShaderNodeValue': Value,
         }
         nodes = tree.as_bpy_type().nodes
         bpy_node = nodes.new(node_type)
@@ -106,12 +180,6 @@ class Node:
 
     def compute_width(self) -> float:
         return self.get_width()
-
-    def on_the_right_side_of(self, ref_node: Node, delta: float) -> Node:
-        ref_x, ref_y = ref_node.get_location()
-        computed_width = ref_node.compute_width()
-        self.set_location((ref_x + computed_width + delta, ref_y))
-        return self
 
     def compute_buttons_y_space(self) -> float:
         return 0.0
@@ -180,11 +248,10 @@ class Node:
 
         return node_bpy.location.y - dy
 
-    def below(self, ref_node: Node, delta: float) -> Node:
-        location = ref_node.get_location()
-        computed_height = ref_node.compute_height()
-        self.set_location((location.x, location.y - computed_height - delta))
+    def set_position(self, position: Position) -> Node:
+        position.set_node_position(self)
         return self
+
 
 class Group:
     pass
@@ -227,6 +294,7 @@ class Group(Nodes):
 
     def set_color_output(self, input_name: str, output_value: list) -> Group:
         return self.set_output(input_name, 'NodeSocketColor', output_value)
+
 
 class Frame(Node):
     pass
@@ -310,6 +378,23 @@ class Reroute(Node):
 class GroupNode(Node):
     pass
 
+
+class GroupNode(Node):
+    @staticmethod
+    def create(tree: Nodes) -> GroupNode:
+        return Node.create(tree, 'ShaderNodeGroup')
+
+    def compute_buttons_y_space(self) -> float:
+        widget_unit = 20
+
+        # template_ID in interface_templates.c
+        dy = widget_unit
+
+        return dy
+
+    def set_node_tree(self, nodes: Nodes) -> GroupNode:
+        self.node.node_tree = nodes.as_bpy_type()
+        return self
 
 class GroupInput(Node):
     pass
@@ -509,6 +594,44 @@ class MusgraveTexture(Node):
         return dy
 
 
+class VoronoiTexture(Node):
+    pass
+
+
+class VoronoiTexture(Node):
+    @staticmethod
+    def create(tree: Nodes) -> VoronoiTexture:
+        return Node.create(tree, 'ShaderNodeTexVoronoi')
+
+    def set_coloring(self, coloring: str) -> VoronoiTexture:
+        self.node.coloring = coloring
+        return self
+
+    def get_vector_input(self) -> Socket:
+        return self.get_input('Vector')
+
+    def get_color_output(self) -> Socket:
+        return self.get_output('Color')
+
+    def set_scale(self, scale: float) -> VoronoiTexture:
+        self.node.inputs['Scale'].default_value = scale
+        return self
+
+    def get_scale_input(self) -> Socket:
+        return self.get_input('Scale')
+
+    def get_mix_factor_output(self) -> Socket:
+        return self.get_output('Fac')
+
+    def compute_buttons_y_space(self) -> float:
+        widget_unit = 20
+
+        # coloring
+        dy = widget_unit
+
+        return dy
+
+
 class ColorRamp(Node):
     pass
 
@@ -548,6 +671,9 @@ class ColorRamp(Node):
 
     def get_color_output(self) -> Socket:
         return self.get_output('Color')
+
+    def get_alpha_output(self) -> Socket:
+        return self.get_output('Alpha')
 
     def compute_width(self):
         widget_unit = 20
@@ -697,9 +823,90 @@ class Math(Node):
         return dy
 
 
+class SeparateRGB(Node):
+    pass
+
+class SeparateRGB(Node):
+    @staticmethod
+    def create(tree: Nodes) -> SeparateRGB:
+        return Node.create(tree, 'ShaderNodeSeparateRGB')
+
+    def get_image_input(self) -> Socket:
+        return self.get_input("Image")
+
+    def get_R_output(self) -> Socket:
+        return self.get_output('R')
+
+    def get_G_output(self) -> Socket:
+        return self.get_output('G')
+
+    def get_B_output(self) -> Socket:
+        return self.get_output('B')
+
+
+class SeparateXYZ(Node):
+    pass
+
+
+class SeparateXYZ(Node):
+    @staticmethod
+    def create(tree: Nodes) -> SeparateXYZ:
+        return Node.create(tree, 'ShaderNodeSeparateXYZ')
+
+    def get_vector_input(self) -> Socket:
+        return self.get_input('Vector')
+
+    def get_X_output(self) -> Socket:
+        return self.get_output('X')
+
+    def get_Y_output(self) -> Socket:
+        return self.get_output('Y')
+
+    def get_Z_output(self) -> Socket:
+        return self.get_output('Z')
+
+
+class CombineXYZ(Node):
+    pass
+
+
+class CombineXYZ(Node):
+    @staticmethod
+    def create(tree: Nodes) -> CombineXYZ:
+        return Node.create(tree, 'ShaderNodeCombineXYZ')
+
+    def get_X_input(self) -> Socket:
+        return self.get_input('X')
+
+    def get_Y_input(self) -> Socket:
+        return self.get_input('Y')
+
+    def get_Z_input(self) -> Socket:
+        return self.get_input('Z')
+
+    def get_vector_output(self) -> Socket:
+        return self.get_output('Vector')
+
+
+class Value(Node):
+    pass
+
+
+class Value(Node):
+    @staticmethod
+    def create(tree: Nodes) -> Value:
+        return Node.create(tree, 'ShaderNodeValue')
+
+    def set_value(self, value: float) -> Value:
+        self.node.outputs['Value'].default_value = value
+        return self
+
+    def get_value_output(self) -> Socket:
+        return self.get_output('Value')
+
 class WoodPatternBartek:
 
-    def build(self):
+    def build(self) -> Group:
         wood_pattern = Group.create("Wood Grain Base Bartek")
         wood_pattern.\
             set_vector_input("Texture coordinates",
@@ -723,7 +930,7 @@ class WoodPatternBartek:
         extended_coords = MixRGB.\
             create(wood_pattern).\
             set_label("Extend length axis to infinity").\
-            on_the_right_side_of(group_input, 100.0).\
+            set_position(OnTheRightSideOf(group_input).with_distance(100.0)).\
             set_blend_type('MULTIPLY').\
             set_mix_factor(1.0)
 
@@ -736,31 +943,35 @@ class WoodPatternBartek:
                                                       extended_coords)
         reroute = Reroute.\
             create(wood_pattern).\
-            below(frame, 50.0)
+            set_position(below(frame).with_distance(50.0))
 
         frame, textures_color = self.get_textures_color(wood_pattern,
                                                         group_input,
                                                         distorted_coords,
                                                         frame)
         frame, rings_pattern = self.get_rings_color(wood_pattern,
-                                             group_input,
-                                             textures_color,
-                                             frame)
+                                                    group_input,
+                                                    textures_color,
+                                                    frame)
 
         group_output = GroupOutput.\
             create(wood_pattern).\
-            on_the_right_side_of(frame, 100.0)
+            set_position(on_the_right_side_of(frame).with_distance(100.0))
 
         wood_pattern.link(rings_pattern, group_output.get_input("Grain pattern"))
         wood_pattern.link(distorted_coords, group_output.get_input("Coordinates"))
 
+        return wood_pattern
+
+
     @staticmethod
     def add_distortion(wood_pattern: Group,
                        group_input: Node,
-                       tex_coordinates: MixRGB) -> Socket:
+                       tex_coordinates: MixRGB) -> tuple:
         frame = Frame.\
             create(wood_pattern).\
-            on_the_right_side_of(tex_coordinates, 50.0).\
+            set_position(on_the_right_side_of(tex_coordinates).
+                         with_distance(50.0)).\
             set_label("Distortion").\
             set_shrink(True)
 
@@ -778,7 +989,8 @@ class WoodPatternBartek:
         small_distort_tex = NoiseTexture.\
             create(wood_pattern).\
             set_parent(frame).\
-            below(distort_tex, 50.0).\
+            set_position(below(distort_tex).
+                         with_distance(50.0)).\
             set_detail(2.0).\
             set_distortion(0.0)
         wood_pattern.link(group_input.get_output("Texture coordinates"),
@@ -790,7 +1002,8 @@ class WoodPatternBartek:
             create(wood_pattern).\
             set_label("Reset direction").\
             set_parent(frame).\
-            on_the_right_side_of(distort_tex, 50.0).\
+            set_position(on_the_right_side_of(distort_tex).
+                         with_distance(50.0)).\
             set_blend_type('SUBTRACT').\
             set_mix_factor(1.0).\
             set_second_color((0.5, 0.5, 0.5, 1.0))
@@ -801,7 +1014,8 @@ class WoodPatternBartek:
             create(wood_pattern).\
             set_label("Reset direction").\
             set_parent(frame).\
-            on_the_right_side_of(small_distort_tex, 50.0).\
+            set_position(on_the_right_side_of(small_distort_tex).
+                         with_distance(50.0)).\
             set_blend_type('SUBTRACT').\
             set_mix_factor(1.0).\
             set_second_color((0.5, 0.5, 0.5, 1.0))
@@ -812,7 +1026,8 @@ class WoodPatternBartek:
             create(wood_pattern).\
             set_label("Add distortion").\
             set_parent(frame).\
-            on_the_right_side_of(reset_distort_direction, 50.0).\
+            set_position(on_the_right_side_of(reset_distort_direction).
+                         with_distance(50.0)).\
             set_blend_type('ADD')
         wood_pattern.link(group_input.get_output("Tree bend radius"),
                           add_distortion.get_mix_factor_input())
@@ -825,7 +1040,8 @@ class WoodPatternBartek:
             create(wood_pattern).\
             set_label("Add smaller distortion").\
             set_parent(frame).\
-            on_the_right_side_of(reset_small_distort_direction, 50.0).\
+            set_position(on_the_right_side_of(reset_small_distort_direction).
+                         with_distance(50.0)).\
             set_blend_type('ADD')
         wood_pattern.link(group_input.get_output("Additional bend radius"),
                           add_small_distortion.get_mix_factor_input())
@@ -840,10 +1056,11 @@ class WoodPatternBartek:
     def get_textures_color(wood_pattern: Group,
                            group_input: Node,
                            tex_coordinates: Socket,
-                           previous_positional_node: Node) -> Socket:
+                           previous_positional_node: Node) -> tuple:
         frame = Frame.\
             create(wood_pattern).\
-            on_the_right_side_of(previous_positional_node, 50.0).\
+            set_position(on_the_right_side_of(previous_positional_node).
+                         with_distance(50.0)).\
             set_label("Textures").\
             set_shrink(True)
 
@@ -857,7 +1074,9 @@ class WoodPatternBartek:
         first_noise_tex = NoiseTexture.\
             create(wood_pattern).\
             set_parent(frame).\
-            below(gradient, 50.0).\
+            set_position(below(gradient).
+                         with_distance(50.0)).\
+            set_scale(0.5).\
             set_detail(16.0).\
             set_distortion(9.5)
         wood_pattern.link(tex_coordinates, first_noise_tex.get_vector_input())
@@ -865,7 +1084,9 @@ class WoodPatternBartek:
         second_noise_tex = NoiseTexture.\
             create(wood_pattern).\
             set_parent(frame).\
-            below(first_noise_tex, 50.0).\
+            set_position(below(first_noise_tex).
+                         with_distance(50.0)).\
+            set_scale(500.0).\
             set_detail(18.0).\
             set_distortion(8.0)
         wood_pattern.link(tex_coordinates, second_noise_tex.get_vector_input())
@@ -873,7 +1094,8 @@ class WoodPatternBartek:
         ramp_second_noise = ColorRamp.\
             create(wood_pattern).\
             set_parent(frame).\
-            on_the_right_side_of(second_noise_tex, 50.0).\
+            set_position(on_the_right_side_of(second_noise_tex).
+                         with_distance(50.0)).\
             add_stop(0.456, (0.0, 0.0, 0.0, 1.0)).\
             add_stop(1.0, (1.0, 1.0, 1.0, 1.0))
         wood_pattern.link(second_noise_tex.get_color_output(),
@@ -882,7 +1104,8 @@ class WoodPatternBartek:
         overlay_first_noise = MixRGB.\
             create(wood_pattern).\
             set_parent(frame).\
-            on_the_right_side_of(first_noise_tex, 50.0).\
+            set_position(on_the_right_side_of(first_noise_tex).
+                         with_distance(50.0)).\
             set_blend_type('OVERLAY')
         wood_pattern.link(group_input.get_output("Growth rings distort"),
                           overlay_first_noise.get_mix_factor_input())
@@ -894,7 +1117,8 @@ class WoodPatternBartek:
         overlay_second_noise = MixRGB.\
             create(wood_pattern).\
             set_parent(frame).\
-            on_the_right_side_of(ramp_second_noise, 50.0).\
+            set_position(on_the_right_side_of(ramp_second_noise).
+                         with_distance(50.0)).\
             set_blend_type('OVERLAY')
         wood_pattern.link(group_input.get_output("Growth rings distort 2"),
                           overlay_second_noise.get_mix_factor_input())
@@ -909,10 +1133,11 @@ class WoodPatternBartek:
     def get_rings_color(wood_pattern: Group,
                         group_input: Node,
                         textures_color: Socket,
-                        previous_positional_node: Node) -> Socket:
+                        previous_positional_node: Node) -> tuple:
         frame = Frame.\
             create(wood_pattern).\
-            on_the_right_side_of(previous_positional_node, 50.0).\
+            set_position(on_the_right_side_of(previous_positional_node).
+                         with_distance(50.0)).\
             set_label("Rings").\
             set_shrink(True)
 
@@ -932,7 +1157,8 @@ class WoodPatternBartek:
             create(wood_pattern).\
             set_label("Rings count").\
             set_parent(frame).\
-            below(density_control, 50.0).\
+            set_position(below(density_control).
+                         with_distance(50.0)).\
             set_operation('DIVIDE').\
             set_first_value(1.0)
         wood_pattern.link(group_input.get_output("Growth rings amount"),
@@ -942,7 +1168,8 @@ class WoodPatternBartek:
             create(wood_pattern).\
             set_label("Make rings").\
             set_parent(frame).\
-            on_the_right_side_of(density_control, 50.0).\
+            set_position(on_the_right_side_of(density_control).
+                         with_distance(50.0)).\
             set_operation('MODULO')
         wood_pattern.link(density_control.get_color_output(),
                           make_rings.get_first_value_input())
@@ -953,7 +1180,8 @@ class WoodPatternBartek:
             create(wood_pattern).\
             set_label("Restore brightness").\
             set_parent(frame).\
-            on_the_right_side_of(make_rings, 50.0).\
+            set_position(on_the_right_side_of(make_rings).
+                         with_distance(50.0)).\
             set_operation('DIVIDE')
         wood_pattern.link(make_rings.get_value_output(),
                           restore_brightness.get_first_value_input())
@@ -964,7 +1192,8 @@ class WoodPatternBartek:
             create(wood_pattern).\
             set_label("Softest transition").\
             set_parent(frame).\
-            on_the_right_side_of(restore_brightness, 50.0).\
+            set_position(on_the_right_side_of(restore_brightness).
+                         with_distance(50.0)).\
             add_control_point((0.0, 0.0)).\
             add_control_point((0.923, 1.0), 'VECTOR').\
             add_control_point((1.0, 0.0))
@@ -975,7 +1204,7 @@ class WoodPatternBartek:
 
 # support fibres are "dark background"
 class SupportFibresCekhunen:
-    def build(self):
+    def build(self) -> Group:
         support_fibres = Group.create("Support fibres")
 
         support_fibres.\
@@ -996,7 +1225,8 @@ class SupportFibresCekhunen:
         scale_length = MixRGB.\
             create(support_fibres).\
             set_label("Scale length").\
-            on_the_right_side_of(group_input, 50.0).\
+            set_position(on_the_right_side_of(group_input).
+                         with_distance(50.0)).\
             set_blend_type('MULTIPLY').\
             set_mix_factor(1.0)
         support_fibres.link(group_input.get_output("Texture coordinates"),
@@ -1007,7 +1237,8 @@ class SupportFibresCekhunen:
         scale_depth = MixRGB.\
             create(support_fibres).\
             set_label("Scale depth").\
-            on_the_right_side_of(scale_length, 50.0).\
+            set_position(on_the_right_side_of(scale_length).
+                         with_distance(50.0)).\
             set_blend_type('MULTIPLY').\
             set_mix_factor(1.0)
         support_fibres.link(scale_length.get_color_output(),
@@ -1017,7 +1248,8 @@ class SupportFibresCekhunen:
 
         musgrave = MusgraveTexture.\
             create(support_fibres).\
-            on_the_right_side_of(scale_depth, 50.0).\
+            set_position(on_the_right_side_of(scale_depth).
+                         with_distance(50.0)).\
             set_type('FBM').\
             set_detail(3.0).\
             set_dimension(2.0).\
@@ -1031,7 +1263,8 @@ class SupportFibresCekhunen:
 
         mix = MixRGB.\
             create(support_fibres).\
-            on_the_right_side_of(musgrave, 50.0).\
+            set_position(on_the_right_side_of(musgrave).
+                         with_distance(50.0)).\
             set_blend_type('MIX')
         support_fibres.link(musgrave.get_mix_factor_output(),
                             mix.get_mix_factor_input())
@@ -1042,14 +1275,18 @@ class SupportFibresCekhunen:
 
         group_output = GroupOutput.\
             create(support_fibres).\
-            on_the_right_side_of(mix, 50.0)
+            set_position(on_the_right_side_of(mix).
+                         with_distance(50.0))
 
         support_fibres.link(mix.get_color_output(),
                             group_output.get_input("Color"))
 
+        return support_fibres
+
+
 class AxialParenchimaCekhunen:
 
-    def build(self):
+    def build(self) -> Group:
         axial_parenchima = Group.create("Axial Parenchima")
         axial_parenchima.\
             set_vector_input("Texture coordinates",
@@ -1068,7 +1305,8 @@ class AxialParenchimaCekhunen:
         scale = MixRGB.\
             create(axial_parenchima).\
             set_label("Scale length").\
-            on_the_right_side_of(group_input, 50.0).\
+            set_position(on_the_right_side_of(group_input).
+                         with_distance(50.0)).\
             set_blend_type('MULTIPLY').\
             set_mix_factor(1.0)
         axial_parenchima.link(group_input.get_output("Texture coordinates"),
@@ -1078,7 +1316,8 @@ class AxialParenchimaCekhunen:
 
         noise = NoiseTexture.\
             create(axial_parenchima).\
-            on_the_right_side_of(scale, 50.0).\
+            set_position(on_the_right_side_of(scale).
+                         with_distance(50.0)).\
             set_detail(5.0).\
             set_distortion(5.0)
         axial_parenchima.link(scale.get_color_output(),
@@ -1088,7 +1327,8 @@ class AxialParenchimaCekhunen:
 
         mix = MixRGB.\
             create(axial_parenchima).\
-            on_the_right_side_of(noise, 50.0).\
+            set_position(on_the_right_side_of(noise).
+                         with_distance(50.0)).\
             set_blend_type('MIX')
         axial_parenchima.link(noise.get_mix_factor_output(),
                               mix.get_mix_factor_input())
@@ -1099,21 +1339,587 @@ class AxialParenchimaCekhunen:
 
         group_output = GroupOutput.\
             create(axial_parenchima).\
-            on_the_right_side_of(mix, 50.0)
+            set_position(on_the_right_side_of(mix).
+                         with_distance(50.0))
 
         axial_parenchima.link(mix.get_color_output(),
                               group_output.get_input("Color"))
 
+        return axial_parenchima
+
+
+class LongGrainVesselsCekhunen:
+
+    def build(self) -> Group:
+        vessels = Group.create("Long grain vessels")
+        vessels.\
+            set_vector_input("Texture coordinates",
+                             mathutils.Vector((0.0, 0.0, 0.0))).\
+            set_color_input("Length scale", [0.025, 1.0, 1.0, 1.0]).\
+            set_float_input("Intensity", 3000.0)
+        vessels.\
+            set_color_output("Color", [0.0, 0.0, 0.0, 0.0])
+
+        group_input = GroupInput.\
+            create(vessels).\
+            set_location((0.0, 0.0))
+
+        scale_length = MixRGB.\
+            create(vessels).\
+            set_label("Scale length").\
+            set_position(on_the_right_side_of(group_input).
+                         with_distance(50.0)).\
+            set_blend_type('MULTIPLY').\
+            set_mix_factor(1.0)
+        vessels.link(group_input.get_output("Texture coordinates"),
+                     scale_length.get_first_color_input())
+        vessels.link(group_input.get_output("Length scale"),
+                     scale_length.get_second_color_input())
+
+        voronoi = VoronoiTexture.\
+            create(vessels).\
+            set_position(on_the_right_side_of(scale_length).
+                         with_distance(50.0)).\
+            set_coloring('INTENSITY')
+        vessels.link(scale_length.get_color_output(),
+                     voronoi.get_vector_input())
+        vessels.link(group_input.get_output("Intensity"),
+                     voronoi.get_scale_input())
+
+        select_vessels = ColorRamp.\
+            create(vessels).\
+            set_label("Select vessels").\
+            set_position(on_the_right_side_of(voronoi).
+                         with_distance(50.0)).\
+            add_stop(0.086, (1.0, 1.0, 1.0, 1.0)).\
+            add_stop(0.141, (0.0, 0.0, 0.0, 1.0))
+        vessels.link(voronoi.get_mix_factor_output(),
+                     select_vessels.get_mix_factor_input())
+
+        group_output = GroupOutput.\
+            create(vessels).\
+            set_position(on_the_right_side_of(select_vessels).
+                         with_distance(50.0))
+        vessels.link(select_vessels.get_color_output(),
+                     group_output.get_input("Color"))
+
+        return vessels
+
+
+class Rays:
+    @classmethod
+    def build(cls) -> Group:
+        rays = Group.create("Rays")
+        rays.\
+            set_vector_input("Texture coordinates",
+                             mathutils.Vector((0.0, 0.0, 0.0))).\
+            set_float_input("Count", 50.0).\
+            set_float_input("Thickness", 0.005).\
+            set_float_input("Distortion factor", 0.5).\
+            set_float_input("Distortion scale", 0.6)
+        rays.\
+            set_color_output("Color", [0.0, 0.0, 0.0, 0.0])
+
+        group_input = GroupInput.\
+            create(rays).\
+            set_location((0.0, 0.0))
+
+        previous, distorted_coords = cls.add_distortion(rays, group_input, group_input)
+        previous, angle= cls.get_angle(rays, distorted_coords, previous)
+        previous, is_ray = cls.is_ray(rays, group_input, angle, previous)
+        previous, cut_rays = cls.cut_rays(rays, group_input, distorted_coords, is_ray, previous)
+
+        group_output = GroupOutput.\
+            create(rays).\
+            set_position(on_the_right_side_of(previous).
+                         with_distance(50.0))
+        rays.link(cut_rays,
+                  group_output.get_input("Color"))
+
+        return rays
+
+    @staticmethod
+    def add_distortion(rays: Group,
+                       group_input: Node,
+                       previous_positional_node: Node) -> tuple:
+        frame = Frame.\
+            create(rays).\
+            set_position(on_the_right_side_of(previous_positional_node).
+                         with_distance(50.0)).\
+            set_label("Distortion").\
+            set_shrink(True)
+
+        distort_tex = NoiseTexture.\
+            create(rays).\
+            set_parent(frame).\
+            set_location((50.0, 0.0)).\
+            set_detail(16.0).\
+            set_distortion(2.1)
+        rays.link(group_input.get_output("Texture coordinates"),
+                  distort_tex.get_vector_input())
+        rays.link(group_input.get_output("Distortion scale"),
+                  distort_tex.get_scale_input())
+
+        reset_distort_direction = MixRGB.\
+            create(rays).\
+            set_label("Reset direction").\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(distort_tex).
+                         with_distance(50.0)).\
+            set_blend_type('SUBTRACT').\
+            set_mix_factor(1.0).\
+            set_second_color((0.5, 0.5, 0.5, 1.0))
+        rays.link(distort_tex.get_color_output(),
+                  reset_distort_direction.get_first_color_input())
+
+        add_distortion = MixRGB.\
+            create(rays).\
+            set_label("Add distortion").\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(reset_distort_direction).
+                         with_distance(50.0)).\
+            set_blend_type('ADD')
+        rays.link(group_input.get_output("Distortion factor"),
+                  add_distortion.get_mix_factor_input())
+        rays.link(group_input.get_output("Texture coordinates"),
+                  add_distortion.get_first_color_input())
+        rays.link(reset_distort_direction.get_color_output(),
+                  add_distortion.get_second_color_input())
+
+        return frame, add_distortion.get_color_output()
+
+    # RADIAL gradient texture does the same thing ...
+    @staticmethod
+    def create_angle_group() -> Group:
+
+        angle = Group.create("Angle")
+        angle.\
+            set_vector_input("Texture coordinates",
+                             mathutils.Vector((0.0, 0.0, 0.0)))
+        angle.\
+            set_color_output("Color", [0.0, 0.0, 0.0, 0.0])
+
+        group_input = GroupInput.\
+            create(angle).\
+            set_location((0.0, 0.0))
+
+        get_xy = SeparateXYZ.\
+            create(angle).\
+            set_position(on_the_right_side_of(group_input).
+                         with_distance(50.0))
+        angle.link(group_input.get_output("Texture coordinates"),
+                   get_xy.get_vector_input())
+
+        frame = Frame.\
+            create(angle).\
+            set_position(on_the_right_side_of(get_xy).
+                         with_distance(50.0)).\
+            set_label("atan2(y, x)=2 arctan((sqrt(x^2+y^2)-x)/y)").\
+            set_shrink(True)
+
+        x_square = Math.\
+            create(angle).\
+            set_parent(frame).\
+            set_location((50.0, 0.0)).\
+            set_operation("POWER").\
+            set_second_value(2.0)
+        angle.link(get_xy.get_X_output(), x_square.get_first_value_input())
+
+        y_square = Math.\
+            create(angle).\
+            set_parent(frame).\
+            set_position(below(x_square).
+                         with_distance(50.0)).\
+            set_operation("POWER").\
+            set_second_value(2.0)
+        angle.link(get_xy.get_Y_output(), y_square.get_first_value_input())
+
+        add_squares = Math.\
+            create(angle).\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(x_square).
+                         with_distance(50.0)).\
+            set_operation("ADD")
+        angle.link(x_square.get_value_output(),
+                   add_squares.get_first_value_input())
+        angle.link(y_square.get_value_output(),
+                   add_squares.get_second_value_input())
+
+        square_root = Math.\
+            create(angle).\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(add_squares).
+                         with_distance(50.0)).\
+            set_operation("POWER").\
+            set_second_value(0.5)
+        angle.link(add_squares.get_value_output(),
+                   square_root.get_first_value_input())
+
+        subtract_x = Math.\
+            create(angle).\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(square_root).
+                         with_distance(50.0)).\
+            set_operation("SUBTRACT")
+        angle.link(square_root.get_value_output(),
+                   subtract_x.get_first_value_input())
+        angle.link(get_xy.get_X_output(),
+                   subtract_x.get_second_value_input())
+
+        divide_by_y = Math.\
+            create(angle).\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(subtract_x).
+                         with_distance(50.0)).\
+            set_operation("DIVIDE")
+        angle.link(subtract_x.get_value_output(),
+                   divide_by_y.get_first_value_input())
+        angle.link(get_xy.get_Y_output(),
+                   divide_by_y.get_second_value_input())
+
+        arctan = Math.\
+            create(angle).\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(divide_by_y).
+                         with_distance(50.0)).\
+            set_operation("ARCTANGENT")
+        angle.link(divide_by_y.get_value_output(),
+                   arctan.get_first_value_input())
+
+        multiply_by_2 = Math.\
+            create(angle).\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(arctan).
+                         with_distance(50.0)).\
+            set_operation("MULTIPLY").\
+            set_first_value(2.0)
+        angle.link(arctan.get_value_output(),
+                   multiply_by_2.get_second_value_input())
+
+        start_from_0 = Math.\
+            create(angle).\
+            set_label("Start from 0").\
+            set_position(on_the_right_side_of(frame).
+                         with_distance(50.0)).\
+            set_operation("ADD")
+
+        pi_value = Value.\
+            create(angle).\
+            set_label("PI").\
+            set_position(below(start_from_0).
+                         with_distance(50.0)).\
+            set_value(pi)
+        angle.link(multiply_by_2.get_value_output(),
+                   start_from_0.get_first_value_input())
+        angle.link(pi_value.get_value_output(),
+                   start_from_0.get_second_value_input())
+
+        two_pi_value = Math.\
+            create(angle).\
+            set_label("2PI").\
+            set_position(on_the_right_side_of(pi_value).
+                         with_distance(50.0)).\
+            set_operation("MULTIPLY").\
+            set_first_value(2.0)
+        angle.link(pi_value.get_value_output(),
+                   two_pi_value.get_second_value_input())
+
+        end_to_1 = Math.\
+            create(angle).\
+            set_label("End to 1").\
+            set_position(on_the_right_side_of(start_from_0).
+                         with_distance(50.0)).\
+            set_operation("DIVIDE")
+        angle.link(start_from_0.get_value_output(),
+                   end_to_1.get_first_value_input())
+        angle.link(two_pi_value.get_value_output(),
+                   end_to_1.get_second_value_input())
+
+        group_output = GroupOutput.\
+            create(angle).\
+            set_position(on_the_right_side_of(end_to_1).
+                         with_distance(50.0))
+        angle.link(end_to_1.get_value_output(),
+                   group_output.get_input("Color"))
+
+        return angle
+
+    @staticmethod
+    def get_angle(rays: Group,
+                  distorted_coords: Socket,
+                  previous_positional_node: Node) -> tuple:
+        separate_xyz = SeparateXYZ.\
+            create(rays).\
+            set_position(below(previous_positional_node).
+                         with_distance(50.0))
+        rays.link(distorted_coords, separate_xyz.get_vector_input())
+
+        # swap x and z axis
+        combine_xyz = CombineXYZ.\
+            create(rays).\
+            set_position(on_the_right_side_of(separate_xyz).
+                         with_distance(50.0))
+        rays.link(separate_xyz.get_X_output(), combine_xyz.get_Z_input())
+        rays.link(separate_xyz.get_Y_output(), combine_xyz.get_Y_input())
+        rays.link(separate_xyz.get_Z_output(), combine_xyz.get_X_input())
+
+        angle = GradientTexture.\
+            create(rays).\
+            set_label("angle").\
+            set_position(on_the_right_side_of(combine_xyz).
+                         with_distance(50.0)).\
+            set_type("RADIAL")
+        rays.link(combine_xyz.get_vector_output(), angle.get_vector_input())
+        return separate_xyz, angle.get_color_output()
+
+    @staticmethod
+    def is_ray(rays: Group,
+               group_input: Node,
+               angle: Socket,
+               previous_positional_node: Node) -> tuple:
+
+        frame = Frame.\
+            create(rays).\
+            set_position(below(previous_positional_node).
+                         with_distance(50.0)).\
+            set_label("Is ray ?").\
+            set_shrink(True)
+
+        ray_delta = Math.\
+            create(rays).\
+            set_label("Ray delta").\
+            set_parent(frame).\
+            set_location((50.0, 0.0)).\
+            set_operation("DIVIDE").\
+            set_first_value(1.0)
+        rays.link(group_input.get_output("Count"),
+                  ray_delta.get_second_value_input())
+
+        angle_quotient = Math.\
+            create(rays).\
+            set_label("Angle quotient").\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(ray_delta).
+                         with_distance(50.0)).\
+            set_operation("DIVIDE")
+        rays.link(angle,
+                  angle_quotient.get_first_value_input())
+        rays.link(ray_delta.get_value_output(),
+                  angle_quotient.get_second_value_input())
+
+        nearest_int = Math.\
+            create(rays).\
+            set_label("Nearest int").\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(angle_quotient).
+                         with_distance(50.0)).\
+            set_operation("ROUND")
+        rays.link(angle_quotient.get_value_output(),
+                  nearest_int.get_first_value_input())
+
+        nearest_int_dist = Math.\
+            create(rays).\
+            set_label("Nearest int dist.").\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(nearest_int).
+                         with_distance(50.0)).\
+            set_operation("SUBTRACT")
+        rays.link(angle_quotient.get_value_output(),
+                  nearest_int_dist.get_first_value_input())
+        rays.link(nearest_int.get_value_output(),
+                  nearest_int_dist.get_second_value_input())
+
+        neareast_int_absolute_dist = Math.\
+            create(rays).\
+            set_label("Nearest int absolute dist.").\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(nearest_int_dist).
+                         with_distance(50.0)).\
+            set_operation("ABSOLUTE")
+        rays.link(nearest_int_dist.get_value_output(),
+                  neareast_int_absolute_dist.get_first_value_input())
+
+        is_ray = Math.\
+            create(rays).\
+            set_label("Is ray ?").\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(neareast_int_absolute_dist).
+                         with_distance(50.0)).\
+            set_operation("LESS_THAN")
+        rays.link(neareast_int_absolute_dist.get_value_output(),
+                  is_ray.get_first_value_input())
+        rays.link(group_input.get_output("Thickness"),
+                  is_ray.get_second_value_input())
+
+        return frame, is_ray.get_value_output()
+
+    @staticmethod
+    def cut_rays(rays: Group,
+                 group_input: Node,
+                 distorted_coords: Socket,
+                 is_ray: Socket,
+                 previous_positional_node: Node) -> tuple:
+
+        frame = Frame.\
+            create(rays).\
+            set_position(below(previous_positional_node).
+                         with_distance(50.0)).\
+            set_label("Cut rays").\
+            set_shrink(True)
+
+        musgrave = MusgraveTexture.\
+            create(rays).\
+            set_parent(frame).\
+            set_location((50.0, 0.0)).\
+            set_type('FBM').\
+            set_scale(50.0).\
+            set_detail(2.0).\
+            set_dimension(2.0).\
+            set_lacunarity(1.0).\
+            set_offset(0.0).\
+            set_gain(1.0)
+        rays.link(distorted_coords,
+                  musgrave.get_vector_input())
+
+        mix = MixRGB.\
+            create(rays).\
+            set_parent(frame).\
+            set_position(on_the_right_side_of(musgrave).
+                         with_distance(50.0)).\
+            set_blend_type("MIX").\
+            set_second_color((0.0, 0.0, 0.0, 1.0))
+        rays.link(musgrave.get_mix_factor_output(),
+                  mix.get_mix_factor_input())
+        rays.link(is_ray,
+                  mix.get_first_color_input())
+        return frame, mix.get_color_output()
+
+class DiffuseColorBuilder:
+    def __init__(self,
+                 wood_pattern,
+                 axial_parenchima,
+                 support_fibres,
+                 vessels,
+                 rays):
+        self.wood_pattern = wood_pattern
+        self.axial_parenchima = axial_parenchima
+        self.support_fibres = support_fibres
+        self.vessels = vessels
+        self.rays = rays
+
+    def build(self, tree: Nodes, position: Position):
+        groups = self.build_groups(tree, position)
+
+        wood_pattern = groups[0]
+        support_fibres = groups[1]
+        axial_parenchima = groups[2]
+        vessels = groups[3]
+        rays = groups[4]
+
+        pattern_ramp = ColorRamp.\
+            create(tree).\
+            set_position(on_the_right_side_of(wood_pattern).
+                         with_distance(50.0)).\
+            add_stop(0.0, (1.0, 1.0, 1.0, 0.0)).\
+            add_stop(0.659, (0.0, 0.0, 0.0, 1.0))
+        tree.link(wood_pattern.get_output("Grain pattern"),
+                  pattern_ramp.get_mix_factor_input())
+
+        mix_groups_colors_1 = MixRGB.\
+            create(tree).\
+            set_position(on_the_right_side_of(support_fibres).
+                         with_distance(150.0)).\
+            set_blend_type("MIX")
+        tree.link(pattern_ramp.get_alpha_output(),
+                  mix_groups_colors_1.get_mix_factor_input())
+        tree.link(support_fibres.get_output("Color"),
+                  mix_groups_colors_1.get_first_color_input())
+        tree.link(axial_parenchima.get_output("Color"),
+                  mix_groups_colors_1.get_second_color_input())
+
+        mix_groups_colors_2 = MixRGB.\
+            create(tree).\
+            set_position(on_the_right_side_of(mix_groups_colors_1).
+                         with_distance(50.0)).\
+            set_blend_type("MIX").\
+            set_second_color((0.494, 0.196, 0.044, 1.0))
+        tree.link(vessels.get_output("Color"),
+                  mix_groups_colors_2.get_mix_factor_input())
+        tree.link(mix_groups_colors_1.get_color_output(),
+                  mix_groups_colors_2.get_first_color_input())
+
+        mix_groups_colors_3 = MixRGB.\
+            create(tree).\
+            set_position(on_the_right_side_of(mix_groups_colors_2).
+                         with_distance(50.0)).\
+            set_blend_type("MIX").\
+            set_second_color((0.651, 0.429, 0.189, 1.0))
+        tree.link(rays.get_output("Color"),
+                  mix_groups_colors_3.get_mix_factor_input())
+        tree.link(mix_groups_colors_2.get_color_output(),
+                  mix_groups_colors_3.get_first_color_input())
+
+    def build_groups(self, tree: Nodes, position: Position) -> tuple:
+        wood_pattern_grp = self.wood_pattern.build()
+        axial_parenchima_grp = self.axial_parenchima.build()
+        support_fibres_grp = self.support_fibres.build()
+        vessels_grp = self.vessels.build()
+        rays_grp = self.rays.build()
+
+        wood_pattern = GroupNode.\
+            create(tree).\
+            set_position(position).\
+            set_node_tree(wood_pattern_grp)
+
+        support_fibres = GroupNode.\
+            create(tree).\
+            set_position(below(wood_pattern).
+                         with_distance(50.0)).\
+            set_node_tree(support_fibres_grp)
+
+        axial_parenchima = GroupNode.\
+            create(tree).\
+            set_position(below(support_fibres).
+                         with_distance(50.0)).\
+            set_node_tree(axial_parenchima_grp)
+
+        vessels = GroupNode.\
+            create(tree).\
+            set_position(below(axial_parenchima).
+                         with_distance(50.0)).\
+            set_node_tree(vessels_grp)
+
+        rays = GroupNode.\
+            create(tree).\
+            set_position(below(vessels).
+                         with_distance(50.0)).\
+            set_node_tree(rays_grp)
+
+        return wood_pattern,\
+               support_fibres,\
+               axial_parenchima,\
+               vessels,\
+               rays
 
 def test():
     mat = bpy.data.materials.new("WoodMaterial")
     mat.use_nodes = True
     mat.node_tree.nodes.clear()
     nodes = Nodes(mat.node_tree)
-    #wood_pattern = WoodPatternBartek()
-    #wood_pattern.build()
-    #axial_parenchima = AxialParenchimaCekhunen()
-    #axial_parenchima.build()
+
+    wood_pattern = WoodPatternBartek()
+    axial_parenchima = AxialParenchimaCekhunen()
     support_fibres = SupportFibresCekhunen()
-    support_fibres.build()
+    vessels = LongGrainVesselsCekhunen()
+    rays = Rays()
+
+    position = Location((0, 0))
+    diffuse_color_builder = DiffuseColorBuilder(
+        wood_pattern,
+        axial_parenchima,
+        support_fibres,
+        vessels,
+        rays)
+    diffuse_color_builder.build(nodes, position)
+
 test()
