@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 
 import bpy
 import mathutils
-
+from mathutils import Vector
 
 class Socket:
     def __init__(self, bpy_socket: bpy.types.NodeSocket):
@@ -41,6 +41,29 @@ class Position:
         pass
 
 
+class Above(Position):
+    pass
+
+
+class Above(Position):
+    def __init__(self, relative_node: Node):
+        self.relative_node = relative_node
+        self.distance = 0.0
+
+    def with_distance(self, dist: float) -> Above:
+        self.distance = dist
+        return self
+
+    def set_node_position(self, node: Node):
+        rel_location = self.relative_node.compute_location()
+        height = node.compute_height()
+        node.set_location((rel_location.x, rel_location.y + self.distance + height))
+
+
+def above(relative_node: Node) -> Above:
+    return Above(relative_node)
+
+
 class Below(Position):
     pass
 
@@ -55,7 +78,7 @@ class Below(Position):
         return self
 
     def set_node_position(self, node: Node):
-        location = self.relative_node.get_location()
+        location = self.relative_node.compute_location()
         computed_height = self.relative_node.compute_height()
         node.set_location((location.x, location.y - computed_height - self.distance))
 
@@ -78,13 +101,151 @@ class OnTheRightSideOf(Position):
         return self
 
     def set_node_position(self, node: Node):
-        ref_x, ref_y = self.relative_node.get_location()
+        ref_x, ref_y = self.relative_node.compute_location()
         computed_width = self.relative_node.compute_width()
         node.set_location((ref_x + computed_width + self.distance, ref_y))
 
 
 def on_the_right_side_of(relative_node: Node) -> OnTheRightSideOf:
     return OnTheRightSideOf(relative_node)
+
+
+class Between(Position):
+    pass
+
+
+class Between(Position):
+    def __init__(self, first_node: Node, second_node: Node):
+        self.first_node = first_node
+        self.second_node = second_node
+        self.distance = 0.0
+        self.side = 'right'
+
+    def with_distance(self, dist: float) -> Between:
+        self.distance = dist
+        return self
+
+    def on_the_right(self) -> Between:
+        self.side = 'right'
+        return self
+
+    def on_the_left(self) -> Between:
+        self.side = 'left'
+        return self
+
+    def above(self) -> Between:
+        self.side = 'above'
+        return self
+
+    def below(self) -> Between:
+        self.side = 'below'
+        return self
+
+    def __set_node_right_position(self, node: Node):
+        ref_x1, ref_y1 = self.first_node.compute_location()
+        ref_x2, ref_y2 = self.second_node.compute_location()
+        width1 = self.first_node.compute_width()
+        width2 = self.second_node.compute_width()
+        height1 = self.first_node.compute_height()
+        height2 = self.second_node.compute_height()
+
+        right_co_1 = ref_x1 + width1
+        right_co_2 = ref_x2 + width2
+        if right_co_1 > right_co_2:
+            x_location = right_co_1 + self.distance
+        else:
+            x_location = right_co_2 + self.distance
+
+        y_top = ref_y1 - height1
+        y_bottom = ref_y2
+        if ref_y2 - height2 > y_top:
+            y_top = ref_y2 - height2
+            y_bottom = ref_y1
+        middle_y = y_bottom + (y_top - y_bottom) / 2.0
+        y_location = middle_y + (node.compute_height() / 2.0)
+
+        node.set_location((x_location, y_location))
+
+    def __set_node_left_position(self, node: Node):
+        ref_x1, ref_y1 = self.first_node.compute_location()
+        ref_x2, ref_y2 = self.second_node.compute_location()
+        height1 = self.first_node.compute_height()
+        height2 = self.second_node.compute_height()
+
+        if ref_x1 > ref_x2:
+            x_location = ref_x2 - self.distance
+        else:
+            x_location = ref_x1 - self.distance
+
+        y_top = ref_y1 - height1
+        y_bottom = ref_y2
+        if ref_y2 - height2 > y_top:
+            y_top = ref_y2 - height2
+            y_bottom = ref_y1
+        middle_y = y_bottom + (y_top - y_bottom) / 2.0
+        y_location = middle_y + (node.compute_height() / 2.0)
+
+        node.set_location((x_location, y_location))
+
+    def __set_node_above_position(self, node: Node):
+        ref_x1, ref_y1 = self.first_node.compute_location()
+        ref_x2, ref_y2 = self.second_node.compute_location()
+        width1 = self.first_node.compute_width()
+        width2 = self.second_node.compute_width()
+
+        if ref_y1 > ref_y2:
+            y_location = ref_y2 - self.distance
+        else:
+            y_location = ref_y1 - self.distance
+
+        x_start = ref_x1 + width1
+        x_end = ref_x2
+        if ref_x2 + width2 < x_start:
+            x_start = ref_x2 + width2
+            x_end = ref_x1
+        middle_x = (x_end - x_start) / 2.0
+        x_location = middle_x - (node.compute_width() / 2.0)
+
+        node.set_location((x_location, y_location))
+
+    def __set_node_below_position(self, node: Node):
+        ref_x1, ref_y1 = self.first_node.compute_location()
+        ref_x2, ref_y2 = self.second_node.compute_location()
+        width1 = self.first_node.compute_width()
+        width2 = self.second_node.compute_width()
+        height1 = self.first_node.compute_height()
+        height2 = self.second_node.compute_height()
+
+        bottom_co_1 = ref_y1 + height1
+        bottom_co_2 = ref_y2 + height2
+        if bottom_co_1 > bottom_co_2:
+            y_location = bottom_co_1 + self.distance
+        else:
+            y_location = bottom_co_2 + self.distance
+
+        x_start = ref_x1 + width1
+        x_end = ref_x2
+        if ref_x2 + width2 < x_start:
+            x_start = ref_x2 + width2
+            x_end = ref_x1
+        middle_x = (x_end - x_start) / 2.0
+        x_location = middle_x - (node.compute_width() / 2.0)
+
+        node.set_location((x_location, y_location))
+
+    def set_node_position(self, node: Node):
+
+        if self.side is 'right':
+            self.__set_node_right_position(node)
+        elif self.side is 'left':
+            self.__set_node_left_position(node)
+        elif self.side is 'above':
+            self.__set_node_above_position(node)
+        else:
+            self.__set_node_below_position(node)
+
+def between(first_node: Node, second_node: Node) -> Between:
+    return Between(first_node, second_node)
 
 
 class Location(Position):
@@ -126,6 +287,13 @@ class Node:
             'ShaderNodeSeparateXYZ': SeparateXYZ,
             'ShaderNodeCombineXYZ': CombineXYZ,
             'ShaderNodeValue': Value,
+            'ShaderNodeBsdfDiffuse': BsdfDiffuse,
+            'ShaderNodeBsdfGlossy': BsdfGlossy,
+            'ShaderNodeMixShader': MixShader,
+            'ShaderNodeFresnel': Fresnel,
+            'ShaderNodeInvert': Invert,
+            'ShaderNodeBump': Bump,
+            'ShaderNodeOutputMaterial': OutputMaterial
         }
         nodes = tree.as_bpy_type().nodes
         bpy_node = nodes.new(node_type)
@@ -150,11 +318,11 @@ class Node:
     def get_parent(self) -> bpy.types.Node:
         return self.node.parent
 
-    def set_location(self, location: tuple) -> Node:
+    def set_location(self, location: Vector) -> Node:
         self.node.location = location
         return self
 
-    def get_location(self) -> tuple:
+    def get_location(self) -> Vector:
         return self.node.location
 
     def get_width(self)-> float:
@@ -165,6 +333,17 @@ class Node:
 
     def as_bpy_type(self) -> bpy.types.Node:
         return self.node
+
+    def hide(self) -> Node:
+        self.node.hide = True
+        return self
+
+    def show(self) -> Node:
+        self.node.hide = False
+        return self
+
+    def is_hidden(self) -> bool:
+        return self.node.hide
 
     def get_input(self, key: str) -> Socket:
         return Socket(self.node.inputs[key])
@@ -178,8 +357,45 @@ class Node:
     def get_output(self, index: int) -> Socket:
         return Socket(self.node.outputs[index])
 
+    def __compute_hidden_radius(self) -> float:
+        node_bpy = self.as_bpy_type()
+        widget_unit = 20
+        hidden_rad = 0.75 * widget_unit
+        totout = totin = 0
+        for output in node_bpy.outputs:
+            if output.hide:
+                continue
+            totout += 1
+        for input in node_bpy.inputs:
+            if input.hide:
+                continue
+            totin += 1
+        tot = max(totout, totin)
+        if tot > 4:
+            hidden_rad += 5.0 * (tot - 4.0)
+        return hidden_rad
+
+    def compute_location(self) -> Vector:
+        node_bpy = self.as_bpy_type()
+        node_loc = self.get_location()
+        if node_bpy.hide:
+            widget_unit = 20
+            node_dy = widget_unit
+            hidden_rad = self.__compute_hidden_radius()
+            location = Vector((node_loc.x, node_loc.y - 0.5 * node_dy + hidden_rad))
+        else:
+            location = node_loc
+        return location
+
     def compute_width(self) -> float:
-        return self.get_width()
+        node_bpy = self.as_bpy_type()
+        if node_bpy.hide:
+            hidden_rad = self.__compute_hidden_radius()
+            mini_width = 42.0
+            width = 3 * hidden_rad + mini_width
+        else:
+            width = self.get_width()
+        return width
 
     def compute_buttons_y_space(self) -> float:
         return 0.0
@@ -194,20 +410,8 @@ class Node:
 
         node_bpy = self.as_bpy_type()
         if node_bpy.hide:
-            hidden_rad = 0.75 * widget_unit
-            totout = totin = 0
-            for output in node_bpy.outputs:
-                if output.hide:
-                    continue
-                totout += 1
-            for input in node_bpy.inputs:
-                if input.hide:
-                    continue
-                totin += 1
-            tot = max(totout, totin)
-            if tot > 4:
-                hidden_rad += 5.0 * (tot - 4.0)
-            dy = node_bpy.location.y + hidden_rad - 0.5 * node_dy
+            hidden_rad = self.__compute_hidden_radius()
+            height = 2 * hidden_rad
         else:
             dy = node_bpy.location.y
             # header
@@ -245,8 +449,8 @@ class Node:
             has_options_or_preview = node_bpy.show_preview or node_bpy.show_options
             if node_bpy.inputs or not has_options_or_preview:
                 dy -= node_dys / 2
-
-        return node_bpy.location.y - dy
+            height = node_bpy.location.y - dy
+        return height
 
     def set_position(self, position: Position) -> Node:
         position.set_node_position(self)
@@ -316,6 +520,31 @@ class Frame(Node):
     def set_child(self, child: Node):
         self.children.append(child)
 
+    def compute_location(self) -> Vector:
+        widget_unit = 20
+        margin = 1.5 * widget_unit
+
+        computed_location = frame_location = self.get_location()
+
+        # get children and compute bounding box
+        highest_y = -99999999999999999.0
+        lowest_x = 99999999999999999.0
+        if len(self.children) > 0:
+            for child in self.children:
+                child_loc = child.get_location()
+                child_y = child_loc.y
+                if child_y > highest_y:
+                    highest_y = child_y
+                child_x = child_loc.x
+                if child_x < lowest_x:
+                    lowest_x = child_x
+            lowest_x -= margin
+            highest_y += margin
+            computed_location = Vector((frame_location.x + lowest_x,
+                                        frame_location.y - highest_y))
+
+        return computed_location
+
     def compute_width(self) -> float:
         # from node_draw_frame_prepare in drawnode.c
         widget_unit = 20
@@ -328,7 +557,7 @@ class Frame(Node):
         highest_x = -99999999999999999.0
         if len(self.children) > 0:
             for child in self.children:
-                child_loc = child.get_location()
+                child_loc = child.compute_location()
                 child_x = child_loc.x - margin
                 if child_x < lowest_x:
                     lowest_x = child_x
@@ -352,7 +581,7 @@ class Frame(Node):
         highest_y = -99999999999999999.0
         if len(self.children) > 0:
             for child in self.children:
-                child_loc = child.get_location()
+                child_loc = child.compute_location()
                 child_y = child_loc.y + margin
                 if child_y > highest_y:
                     highest_y = child_y
@@ -904,6 +1133,204 @@ class Value(Node):
     def get_value_output(self) -> Socket:
         return self.get_output('Value')
 
+
+class BsdfDiffuse(Node):
+    pass
+
+
+class BsdfDiffuse(Node):
+    @staticmethod
+    def create(tree: Nodes) -> BsdfDiffuse:
+        return Node.create(tree, 'ShaderNodeBsdfDiffuse')
+
+    def set_color(self, color: tuple) -> BsdfDiffuse:
+        self.node.inputs['Color'].default_value = color
+        return self
+
+    def get_color_input(self) -> Socket:
+        return self.get_input('Color')
+
+    def set_roughness(self, roughness: float) -> BsdfDiffuse:
+        self.node.inputs['Roughness'].default_value = roughness
+        return self
+
+    def get_normal_input(self) -> Socket:
+        return self.get_input('Normal')
+
+    def get_bsdf_output(self) -> Socket:
+        return self.get_output('BSDF')
+
+
+class BsdfGlossy(Node):
+    pass
+
+
+class BsdfGlossy(Node):
+    @staticmethod
+    def create(tree: Nodes) -> BsdfGlossy:
+        return Node.create(tree, 'ShaderNodeBsdfGlossy')
+
+    def set_distribution(self, distribution: str) -> BsdfGlossy:
+        self.node.distribution = distribution
+        return self
+
+    def set_color(self, color: tuple) -> BsdfGlossy:
+        self.node.inputs['Color'].default_value = color
+        return self
+
+    def get_color_input(self) -> Socket:
+        return self.get_input('Color')
+
+    def set_roughness(self, roughness: float) -> BsdfGlossy:
+        self.node.inputs['Roughness'].default_value = roughness
+        return self
+
+    def get_normal_input(self) -> Socket:
+        return self.get_input('Normal')
+
+    def get_bsdf_output(self) -> Socket:
+        return self.get_output('BSDF')
+
+    def compute_buttons_y_space(self) -> float:
+        widget_unit = 20
+
+        # distribution
+        dy = widget_unit
+
+        return dy
+
+
+class MixShader(Node):
+    pass
+
+
+class MixShader(Node):
+    @staticmethod
+    def create(tree: Nodes) -> MixShader:
+        return Node.create(tree, 'ShaderNodeMixShader')
+
+    def set_mix_factor(self, mix_factor: float) -> MixShader:
+        self.node.inputs['Fac'].default_value = mix_factor
+        return self
+
+    def get_mix_factor_input(self) -> Socket:
+        return self.get_input('Fac')
+
+    def get_first_shader_input(self) -> Socket:
+        return self.get_input(1)
+
+    def get_second_shader_input(self) -> Socket:
+        return self.get_input(2)
+
+    def get_shader_output(self) -> Socket:
+        return self.get_output('Shader')
+
+
+class Fresnel(Node):
+    pass
+
+
+class Fresnel(Node):
+    @staticmethod
+    def create(tree: Nodes) -> Fresnel:
+        return Node.create(tree, 'ShaderNodeFresnel')
+
+    def set_ior(self, ior: float) -> Fresnel:
+        self.node.inputs['IOR'].default_value = ior
+        return self
+
+    def get_normal_input(self) -> Socket:
+        return self.get_input('Normal')
+
+    def get_mix_factor_output(self) -> Socket:
+        return self.get_output('Fac')
+
+
+class Invert(Node):
+    pass
+
+
+class Invert(Node):
+    @staticmethod
+    def create(tree: Nodes) -> Invert:
+        return Node.create(tree, 'ShaderNodeInvert')
+
+    def set_mix_factor(self, mix_factor: float) -> Invert:
+        self.node.inputs['Fac'].default_value = mix_factor
+        return self
+
+    def get_mix_factor_input(self) -> Socket:
+        return self.get_input('Fac')
+
+    def set_color(self, color: tuple) -> Invert:
+        self.node.inputs['Color'].default_value = color
+        return self
+
+    def get_color_input(self) -> Socket:
+        return self.get_input('Color')
+
+    def get_color_output(self) -> Socket:
+        return self.get_output('Color')
+
+
+class Bump(Node):
+    pass
+
+
+class Bump(Node):
+    @staticmethod
+    def create(tree: Nodes) -> Invert:
+        return Node.create(tree, 'ShaderNodeBump')
+
+    def invert(self) -> Bump:
+        self.node.invert = True
+        return self
+
+    def set_strength(self, strength: float) -> Bump:
+        self.node.inputs['Strength'].default_value = strength
+        return self
+
+    def set_distance(self, distance: float) -> Bump:
+        self.node.inputs['Distance'].default_value = distance
+        return self
+
+    def get_height_input(self) -> Socket:
+        return self.get_input('Height')
+
+    def get_normal_input(self) -> Socket:
+        return self.get_input('Normal')
+
+    def get_normal_output(self) -> Socket:
+        return self.get_output('Normal')
+
+    def compute_buttons_y_space(self) -> float:
+        widget_unit = 20
+
+        # invert
+        dy = widget_unit
+
+        return dy
+
+
+class OutputMaterial(Node):
+    pass
+
+
+class OutputMaterial(Node):
+    @staticmethod
+    def create(tree: Nodes) -> OutputMaterial:
+        return Node.create(tree, 'ShaderNodeOutputMaterial')
+
+    def get_surface_input(self) -> Socket:
+        return self.get_input('Surface')
+
+    def get_volume_input(self) -> Socket:
+        return self.get_input('Volume')
+
+    def get_displacement_input(self) -> Socket:
+        return self.get_input('Displacement')
+
+
 class WoodPatternBartek:
 
     def build(self) -> Group:
@@ -954,11 +1381,21 @@ class WoodPatternBartek:
                                                     textures_color,
                                                     frame)
 
+        pattern_ramp = ColorRamp.\
+            create(wood_pattern).\
+            set_position(on_the_right_side_of(frame).
+                         with_distance(50.0)).\
+            add_stop(0.0, (1.0, 1.0, 1.0, 0.0)).\
+            add_stop(0.659, (0.0, 0.0, 0.0, 1.0))
+        wood_pattern.link(rings_pattern,
+                          pattern_ramp.get_mix_factor_input())
+
         group_output = GroupOutput.\
             create(wood_pattern).\
-            set_position(on_the_right_side_of(frame).with_distance(100.0))
+            set_position(on_the_right_side_of(pattern_ramp).with_distance(100.0))
 
-        wood_pattern.link(rings_pattern, group_output.get_input("Grain pattern"))
+        wood_pattern.link(pattern_ramp.get_alpha_output(),
+                          group_output.get_input("Grain pattern"))
         wood_pattern.link(distorted_coords, group_output.get_input("Coordinates"))
 
         return wood_pattern
@@ -1680,8 +2117,6 @@ class Rays:
 
         frame = Frame.\
             create(rays).\
-            set_position(below(previous_positional_node).
-                         with_distance(50.0)).\
             set_label("Is ray ?").\
             set_shrink(True)
 
@@ -1751,6 +2186,9 @@ class Rays:
         rays.link(group_input.get_output("Thickness"),
                   is_ray.get_second_value_input())
 
+        frame.set_position(below(previous_positional_node).
+                           with_distance(50.0))
+
         return frame, is_ray.get_value_output()
 
     @staticmethod
@@ -1792,6 +2230,9 @@ class Rays:
                   mix.get_mix_factor_input())
         rays.link(is_ray,
                   mix.get_first_color_input())
+
+        frame.set_position(below(previous_positional_node).
+                           with_distance(50.0))
         return frame, mix.get_color_output()
 
 class DiffuseColorBuilder:
@@ -1816,34 +2257,28 @@ class DiffuseColorBuilder:
         vessels = groups[3]
         rays = groups[4]
 
-        pattern_ramp = ColorRamp.\
-            create(tree).\
-            set_position(on_the_right_side_of(wood_pattern).
-                         with_distance(50.0)).\
-            add_stop(0.0, (1.0, 1.0, 1.0, 0.0)).\
-            add_stop(0.659, (0.0, 0.0, 0.0, 1.0))
-        tree.link(wood_pattern.get_output("Grain pattern"),
-                  pattern_ramp.get_mix_factor_input())
+        tree.link(wood_pattern.get_output('Coordinates'),
+                  rays.get_input('Texture coordinates'))
 
         mix_groups_colors_1 = MixRGB.\
             create(tree).\
             set_position(on_the_right_side_of(support_fibres).
                          with_distance(150.0)).\
             set_blend_type("MIX")
-        tree.link(pattern_ramp.get_alpha_output(),
+        tree.link(wood_pattern.get_output('Grain pattern'),
                   mix_groups_colors_1.get_mix_factor_input())
-        tree.link(support_fibres.get_output("Color"),
+        tree.link(support_fibres.get_output('Color'),
                   mix_groups_colors_1.get_first_color_input())
-        tree.link(axial_parenchima.get_output("Color"),
+        tree.link(axial_parenchima.get_output('Color'),
                   mix_groups_colors_1.get_second_color_input())
 
         mix_groups_colors_2 = MixRGB.\
             create(tree).\
             set_position(on_the_right_side_of(mix_groups_colors_1).
                          with_distance(50.0)).\
-            set_blend_type("MIX").\
+            set_blend_type('MIX').\
             set_second_color((0.494, 0.196, 0.044, 1.0))
-        tree.link(vessels.get_output("Color"),
+        tree.link(vessels.get_output('Color'),
                   mix_groups_colors_2.get_mix_factor_input())
         tree.link(mix_groups_colors_1.get_color_output(),
                   mix_groups_colors_2.get_first_color_input())
@@ -1852,12 +2287,22 @@ class DiffuseColorBuilder:
             create(tree).\
             set_position(on_the_right_side_of(mix_groups_colors_2).
                          with_distance(50.0)).\
-            set_blend_type("MIX").\
+            set_blend_type('MIX').\
             set_second_color((0.651, 0.429, 0.189, 1.0))
-        tree.link(rays.get_output("Color"),
+        tree.link(rays.get_output('Color'),
                   mix_groups_colors_3.get_mix_factor_input())
         tree.link(mix_groups_colors_2.get_color_output(),
                   mix_groups_colors_3.get_first_color_input())
+
+        diffuse = BsdfDiffuse.\
+            create(tree).\
+            set_position(on_the_right_side_of(mix_groups_colors_3).
+                         with_distance(50.0)).\
+            set_roughness(0.0)
+        tree.link(mix_groups_colors_3.get_color_output(),
+                  diffuse.get_color_input())
+
+        return diffuse, groups
 
     def build_groups(self, tree: Nodes, position: Position) -> tuple:
         wood_pattern_grp = self.wood_pattern.build()
@@ -1891,8 +2336,8 @@ class DiffuseColorBuilder:
 
         rays = GroupNode.\
             create(tree).\
-            set_position(below(vessels).
-                         with_distance(50.0)).\
+            set_position(on_the_right_side_of(wood_pattern).
+                         with_distance(150.0)).\
             set_node_tree(rays_grp)
 
         return wood_pattern,\
@@ -1900,6 +2345,104 @@ class DiffuseColorBuilder:
                axial_parenchima,\
                vessels,\
                rays
+
+
+class GlossyReflectionBuilder:
+    def build(self,
+              tree: Nodes,
+              position: Position,
+              wood_pattern: GroupNode,
+              vessels: GroupNode):
+        previous, bump_height = self.set_bump_height(tree,
+                                                     position,
+                                                     wood_pattern,
+                                                     vessels)
+
+        bump = Bump.\
+            create(tree).\
+            set_position(on_the_right_side_of(previous).
+                         with_distance(50.0)).\
+            set_strength(0.1).\
+            set_distance(0.1)
+        tree.link(bump_height, bump.get_height_input())
+
+        glossy = BsdfGlossy.\
+            create(tree).\
+            set_position(on_the_right_side_of(bump).
+                         with_distance(50.0)).\
+            set_distribution('GGX').\
+            set_color((0.8, 0.8, 0.8, 1.0)).\
+            set_roughness(0.0)
+        tree.link(bump.get_normal_output(),
+                  glossy.get_normal_input())
+
+        return glossy
+
+
+    @staticmethod
+    def set_bump_height(tree: Nodes,
+                        position: Position,
+                        wood_pattern: ColorRamp,
+                        vessels: GroupNode) -> tuple:
+        invert_vessels = Invert.\
+            create(tree).\
+            set_position(position).\
+            set_mix_factor(1.0)
+        tree.link(vessels.get_output("Color"),
+                  invert_vessels.get_color_input())
+
+        vessels_height_control = RGBCurve.\
+            create(tree).\
+            hide().\
+            set_position(on_the_right_side_of(invert_vessels).
+                         with_distance(50.0)).\
+            add_control_point((0.0, 0.0)).\
+            add_control_point((1.0, 0.31875))
+        tree.link(invert_vessels.get_color_output(),
+                  vessels_height_control.get_color_input())
+
+        wood_pattern_height_control = RGBCurve.\
+            create(tree).\
+            hide().\
+            set_position(above(vessels_height_control).
+                         with_distance(50.0)).\
+            add_control_point((0.0, 0.0)).\
+            add_control_point((1.0, 0.5))
+        tree.link(wood_pattern.get_output('Grain pattern'),
+                  wood_pattern_height_control.get_color_input())
+
+        mix_height = MixRGB.\
+            create(tree).\
+            set_position(between(vessels_height_control,
+                                 wood_pattern_height_control).
+                         on_the_right().
+                         with_distance(50.0)).\
+            set_blend_type("MIX").\
+            set_mix_factor(0.5)
+        tree.link(wood_pattern_height_control.get_color_output(),
+                  mix_height.get_first_color_input())
+        tree.link(vessels_height_control.get_color_output(),
+                  mix_height.get_second_color_input())
+        return mix_height, mix_height.get_color_output()
+
+
+class DiffuseGlossyMixer:
+    def build(self,
+              tree: Nodes,
+              diffuse: BsdfDiffuse,
+              glossy: BsdfGlossy) -> MixShader:
+
+        mix_shader = MixShader.\
+            create(tree).\
+            set_position(between(diffuse, glossy).
+                         on_the_right().
+                         with_distance(50.0))
+        tree.link(diffuse.get_bsdf_output(),
+                  mix_shader.get_first_shader_input())
+        tree.link(glossy.get_bsdf_output(),
+                  mix_shader.get_second_shader_input())
+        return mix_shader
+
 
 def test():
     mat = bpy.data.materials.new("WoodMaterial")
@@ -1920,6 +2463,15 @@ def test():
         support_fibres,
         vessels,
         rays)
-    diffuse_color_builder.build(nodes, position)
+    diffuse, groups = diffuse_color_builder.build(nodes, position)
+
+    wood_pattern_group_node = groups[0]
+    vessels_group_node = groups[3]
+    position = on_the_right_side_of(vessels_group_node).with_distance(150.0)
+    glossy_reflection = GlossyReflectionBuilder()
+    glossy = glossy_reflection.build(nodes, position, wood_pattern_group_node, vessels_group_node)
+
+    diffuse_glossy_mixer = DiffuseGlossyMixer()
+    shader = diffuse_glossy_mixer.build(nodes, diffuse, glossy)
 
 test()
