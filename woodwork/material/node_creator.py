@@ -57,7 +57,7 @@ class Above(Position):
     def set_node_position(self, node: Node):
         rel_location = self.relative_node.compute_location()
         height = node.compute_height()
-        node.set_location((rel_location.x, rel_location.y + self.distance + height))
+        node.set_location(Vector((rel_location.x, rel_location.y + self.distance + height)))
 
 
 def above(relative_node: Node) -> Above:
@@ -80,7 +80,7 @@ class Below(Position):
     def set_node_position(self, node: Node):
         location = self.relative_node.compute_location()
         computed_height = self.relative_node.compute_height()
-        node.set_location((location.x, location.y - computed_height - self.distance))
+        node.set_location(Vector((location.x, location.y - computed_height - self.distance)))
 
 
 def below(relative_node: Node) -> Below:
@@ -103,7 +103,7 @@ class OnTheRightSideOf(Position):
     def set_node_position(self, node: Node):
         ref_x, ref_y = self.relative_node.compute_location()
         computed_width = self.relative_node.compute_width()
-        node.set_location((ref_x + computed_width + self.distance, ref_y))
+        node.set_location(Vector((ref_x + computed_width + self.distance, ref_y)))
 
 
 def on_the_right_side_of(relative_node: Node) -> OnTheRightSideOf:
@@ -164,7 +164,7 @@ class Between(Position):
         middle_y = y_bottom + (y_top - y_bottom) / 2.0
         y_location = middle_y + (node.compute_height() / 2.0)
 
-        node.set_location((x_location, y_location))
+        node.set_location(Vector((x_location, y_location)))
 
     def __set_node_left_position(self, node: Node):
         ref_x1, ref_y1 = self.first_node.compute_location()
@@ -185,7 +185,7 @@ class Between(Position):
         middle_y = y_bottom + (y_top - y_bottom) / 2.0
         y_location = middle_y + (node.compute_height() / 2.0)
 
-        node.set_location((x_location, y_location))
+        node.set_location(Vector((x_location, y_location)))
 
     def __set_node_above_position(self, node: Node):
         ref_x1, ref_y1 = self.first_node.compute_location()
@@ -206,7 +206,7 @@ class Between(Position):
         middle_x = (x_end - x_start) / 2.0
         x_location = middle_x - (node.compute_width() / 2.0)
 
-        node.set_location((x_location, y_location))
+        node.set_location(Vector((x_location, y_location)))
 
     def __set_node_below_position(self, node: Node):
         ref_x1, ref_y1 = self.first_node.compute_location()
@@ -231,7 +231,7 @@ class Between(Position):
         middle_x = (x_end - x_start) / 2.0
         x_location = middle_x - (node.compute_width() / 2.0)
 
-        node.set_location((x_location, y_location))
+        node.set_location(Vector((x_location, y_location)))
 
     def set_node_position(self, node: Node):
 
@@ -249,14 +249,14 @@ def between(first_node: Node, second_node: Node) -> Between:
 
 
 class Location(Position):
-    def __init__(self, location: tuple):
+    def __init__(self, location: Vector):
         self.location = location
 
     def set_node_position(self, node: Node):
         node.set_location(self.location)
 
 
-def location(location: tuple) -> Location:
+def location(location: Vector) -> Location:
     return Location(location)
 
 
@@ -520,76 +520,80 @@ class Frame(Node):
     def set_child(self, child: Node):
         self.children.append(child)
 
+    def __get_bounding_box(self):
+        lowests = Vector((99999999999999999.0, 99999999999999999.0))
+        highests = Vector((-99999999999999999.0, -99999999999999999.0))
+        if len(self.children) > 0:
+            for child in self.children:
+                child_loc = child.compute_location()
+
+                child_x = child_loc.x
+                if child_x < lowests.x:
+                    lowests.x = child_x
+
+                child_y = child_loc.y
+                if child_y > highests.y:
+                    highests.y = child_y
+
+                child_width = child.compute_width()
+                child_xmax = child_loc.x + child_width
+                if child_xmax > highests.x:
+                    highests.x = child_xmax
+
+                child_height = child.compute_height()
+                child_ymax = child_loc.y - child_height
+                if child_ymax < lowests.y:
+                    lowests.y = child_ymax
+
+            widget_unit = 20
+            margin = 1.5 * widget_unit
+            lowests.x -= margin
+            lowests.y -= margin
+            highests.x += margin
+            highests.y += margin
+        else:
+            lowests = Vector((0.0, 0.0))
+            highests = Vector(self.get_width(),
+                              self.get_height())
+        return lowests, highests
+
+    def set_location(self, location: Vector) -> Frame:
+        if len(self.children) > 0:
+            min, max = self.__get_bounding_box()
+
+            Node.set_location(self, Vector((location.x - min.x,
+                                            location.y - max.y)))
+        return self
+
     def compute_location(self) -> Vector:
-        widget_unit = 20
-        margin = 1.5 * widget_unit
 
         computed_location = frame_location = self.get_location()
 
-        # get children and compute bounding box
-        highest_y = -99999999999999999.0
-        lowest_x = 99999999999999999.0
         if len(self.children) > 0:
-            for child in self.children:
-                child_loc = child.get_location()
-                child_y = child_loc.y
-                if child_y > highest_y:
-                    highest_y = child_y
-                child_x = child_loc.x
-                if child_x < lowest_x:
-                    lowest_x = child_x
-            lowest_x -= margin
-            highest_y += margin
-            computed_location = Vector((frame_location.x + lowest_x,
-                                        frame_location.y - highest_y))
+            min, max = self.__get_bounding_box()
+
+            computed_location = Vector((frame_location.x + min.x,
+                                        frame_location.y + max.y))
 
         return computed_location
 
     def compute_width(self) -> float:
-        # from node_draw_frame_prepare in drawnode.c
-        widget_unit = 20
-        margin = 1.5 * widget_unit
 
         width = self.node.width
 
-        # get children and compute bounding box
-        lowest_x = 99999999999999999.0
-        highest_x = -99999999999999999.0
         if len(self.children) > 0:
-            for child in self.children:
-                child_loc = child.compute_location()
-                child_x = child_loc.x - margin
-                if child_x < lowest_x:
-                    lowest_x = child_x
-                child_width = child.compute_width()
-                child_xmax = child_loc.x + child_width + margin
-                if child_xmax > highest_x:
-                    highest_x = child_xmax
-            width = highest_x - lowest_x
+            min, max = self.__get_bounding_box()
+            width = max.x - min.x
 
         return width
 
     def compute_height(self) -> float:
-        # from node_draw_frame_prepare in drawnode.c
-        widget_unit = 20
-        margin = 1.5 * widget_unit
 
         height = self.node.height
 
-        # get children and compute bounding box
-        lowest_y = 99999999999999999.0
-        highest_y = -99999999999999999.0
         if len(self.children) > 0:
-            for child in self.children:
-                child_loc = child.compute_location()
-                child_y = child_loc.y + margin
-                if child_y > highest_y:
-                    highest_y = child_y
-                child_height = child.compute_height()
-                child_ymax = child_loc.y - child_height - margin
-                if child_ymax < lowest_y:
-                    lowest_y = child_ymax
-            height = highest_y - lowest_y
+            min, max = self.__get_bounding_box()
+            height = max.y - min.y
 
         return height
 
@@ -1368,9 +1372,6 @@ class WoodPatternBartek:
         frame, distorted_coords = self.add_distortion(wood_pattern,
                                                       group_input,
                                                       extended_coords)
-        reroute = Reroute.\
-            create(wood_pattern).\
-            set_position(below(frame).with_distance(50.0))
 
         frame, textures_color = self.get_textures_color(wood_pattern,
                                                         group_input,
@@ -1407,8 +1408,6 @@ class WoodPatternBartek:
                        tex_coordinates: MixRGB) -> tuple:
         frame = Frame.\
             create(wood_pattern).\
-            set_position(on_the_right_side_of(tex_coordinates).
-                         with_distance(50.0)).\
             set_label("Distortion").\
             set_shrink(True)
 
@@ -1487,6 +1486,9 @@ class WoodPatternBartek:
         wood_pattern.link(reset_small_distort_direction.get_color_output(),
                           add_small_distortion.get_second_color_input())
 
+        frame.set_position(on_the_right_side_of(tex_coordinates).
+                           with_distance(50.0))
+
         return frame, add_small_distortion.get_color_output()
 
     @staticmethod
@@ -1496,8 +1498,6 @@ class WoodPatternBartek:
                            previous_positional_node: Node) -> tuple:
         frame = Frame.\
             create(wood_pattern).\
-            set_position(on_the_right_side_of(previous_positional_node).
-                         with_distance(50.0)).\
             set_label("Textures").\
             set_shrink(True)
 
@@ -1564,6 +1564,8 @@ class WoodPatternBartek:
         wood_pattern.link(ramp_second_noise.get_color_output(),
                           overlay_second_noise.get_second_color_input())
 
+        frame.set_position(on_the_right_side_of(previous_positional_node).
+                         with_distance(50.0))
         return frame, overlay_second_noise.get_color_output()
 
     @staticmethod
@@ -1573,8 +1575,6 @@ class WoodPatternBartek:
                         previous_positional_node: Node) -> tuple:
         frame = Frame.\
             create(wood_pattern).\
-            set_position(on_the_right_side_of(previous_positional_node).
-                         with_distance(50.0)).\
             set_label("Rings").\
             set_shrink(True)
 
@@ -1636,6 +1636,9 @@ class WoodPatternBartek:
             add_control_point((1.0, 0.0))
         wood_pattern.link(restore_brightness.get_value_output(),
                           make_softest_transition.get_color_input())
+
+        frame.set_position(on_the_right_side_of(previous_positional_node).
+                           with_distance(50.0))
         return frame, make_softest_transition.get_color_output()
 
 
@@ -1881,8 +1884,6 @@ class Rays:
                        previous_positional_node: Node) -> tuple:
         frame = Frame.\
             create(rays).\
-            set_position(on_the_right_side_of(previous_positional_node).
-                         with_distance(50.0)).\
             set_label("Distortion").\
             set_shrink(True)
 
@@ -1922,6 +1923,9 @@ class Rays:
                   add_distortion.get_first_color_input())
         rays.link(reset_distort_direction.get_color_output(),
                   add_distortion.get_second_color_input())
+
+        frame.set_position(on_the_right_side_of(previous_positional_node).
+                           with_distance(50.0))
 
         return frame, add_distortion.get_color_output()
 
@@ -2200,8 +2204,6 @@ class Rays:
 
         frame = Frame.\
             create(rays).\
-            set_position(below(previous_positional_node).
-                         with_distance(50.0)).\
             set_label("Cut rays").\
             set_shrink(True)
 
@@ -2233,7 +2235,9 @@ class Rays:
 
         frame.set_position(below(previous_positional_node).
                            with_distance(50.0))
+
         return frame, mix.get_color_output()
+
 
 class DiffuseColorBuilder:
     def __init__(self,
@@ -2456,7 +2460,7 @@ def test():
     vessels = LongGrainVesselsCekhunen()
     rays = Rays()
 
-    position = Location((0, 0))
+    position = Location(Vector((0, 0)))
     diffuse_color_builder = DiffuseColorBuilder(
         wood_pattern,
         axial_parenchima,
